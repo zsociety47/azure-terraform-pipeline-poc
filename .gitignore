@@ -1,0 +1,28 @@
+# Provider plugins downloaded by terraform init. Rebuilt locally, not committed.
+.terraform/
+
+# Terraform's memory of what it created. Holds resource IDs. Never commit it.
+*.tfstate
+*.tfstate.*
+
+# Written when Terraform crashes. May contain a partial state snapshot.
+crash.log
+crash.*.log
+
+# Variable files are the usual place a subscription id or other secret would land.
+*.tfvars
+*.tfvars.json
+
+# Local-only overrides. Not part of the shared configuration.
+override.tf
+override.tf.json
+*_override.tf
+*_override.tf.json
+
+# Environment files. Sign-in values stay in the environment, not in a committed file.
+.env
+.env.*
+
+keys/
+*.pem
+.DS_Store
