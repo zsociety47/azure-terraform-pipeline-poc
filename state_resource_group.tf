@@ -6,5 +6,9 @@
 resource "azurerm_resource_group" "state" {
   name     = var.state_resource_group_name
   location = var.location
-  tags     = var.tags
+  tags     = local.state_tags
+
+  lifecycle {
+    ignore_changes = [tags["created"]]
+  }
 }

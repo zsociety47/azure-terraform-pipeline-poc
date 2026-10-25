@@ -90,12 +90,10 @@ variable "main_subject" {
 }
 
 variable "tags" {
-  description = "Tags on the resource groups and the storage account."
+  description = "Base tags shared by every resource. lifetime and created are added per resource group in tags.tf."
   type        = map(string)
   default = {
-    project     = "azure-terraform-pipeline-poc"
-    environment = "poc"
-    managed-by  = "terraform"
-    owner       = "zeon"
+    project = "azure-terraform-pipeline-poc"
+    owner   = "zeon"
   }
 }

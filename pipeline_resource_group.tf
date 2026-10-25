@@ -7,5 +7,9 @@
 resource "azurerm_resource_group" "pipeline" {
   name     = var.pipeline_resource_group_name
   location = var.location
-  tags     = var.tags
+  tags     = local.pipeline_tags
+
+  lifecycle {
+    ignore_changes = [tags["created"]]
+  }
 }

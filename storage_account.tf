@@ -29,5 +29,9 @@ resource "azurerm_storage_account" "state" {
     }
   }
 
-  tags = var.tags
+  tags = local.state_tags
+
+  lifecycle {
+    ignore_changes = [tags["created"]]
+  }
 }
