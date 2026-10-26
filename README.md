@@ -15,9 +15,11 @@ The walkthrough is not recorded yet.
 
 Part of [Cloud Projects](https://github.com/zsociety47/cloud-projects). Technical details are in [Technical findings](#technical-findings) at the bottom.
 
-The design picture below is the reference. It comes from the Claude Design canvas. The [Architecture](#architecture) diagram is the live map. If a name disagrees, the Terraform files win. The picture still says there is no role on the pipeline group and that the backend is not written. Contributor is applied, and state is in `sttfpipezeon01`.
+The design picture below is the reference. It comes from the Claude Design canvas. The [Architecture](#architecture) diagram is the live map. If a name disagrees, the Terraform files win.
 
 ![Design picture of GitHub planning and applying Terraform into Azure](docs/architecture/architecture.png)
+
+*Reference picture. On that picture, a solid box is built and working. Teardown and a branch rule that requires the plan check are still open.*
 
 ---
 
@@ -55,7 +57,7 @@ terraform init
 
 The last line should be `Terraform has been successfully initialized!`
 
-<!-- ![terraform init finished with the success line](docs/images/step-02-init.png) -->
+![terraform init finished with the success line](docs/images/step-02-init.png)
 
 ### Step 3: Sign in without storing the subscription id
 
@@ -63,7 +65,7 @@ The last line should be `Terraform has been successfully initialized!`
 
 The providers use the Azure CLI login already on the machine. There is no `subscription_id` line in the file. `resource_provider_registrations = "none"` means apply does not register Azure resource providers. `storage_use_azuread = true` is required because shared keys are off on the state account. Creating a container is a data action.
 
-<!-- ![provider blocks with no subscription id](docs/images/step-03-provider.png) -->
+![provider blocks with no subscription id](docs/images/step-03-provider.png)
 
 ### Step 4: Put the names in one place
 
@@ -83,7 +85,7 @@ The providers use the Azure CLI login already on the machine. There is no `subsc
 
 The OIDC subjects include the GitHub owner id and repository id. A name-only subject would not match a token from this repository.
 
-<!-- ![variables.tf with the two resource group names](docs/images/step-04-names.png) -->
+![variables.tf with the two resource group names](docs/images/step-04-names.png)
 
 ### Step 5: Tag the two groups differently
 
@@ -91,7 +93,7 @@ The OIDC subjects include the GitHub owner id and repository id. A name-only sub
 
 Both groups get `owner = zeon` and `project = azure-terraform-pipeline-poc`. The state group and the storage account also get `lifetime = keep`, so a nightly delete does not remove the state file. The pipeline group gets `lifetime = 1d`. `created` is set once and then ignored.
 
-<!-- ![tags.tf with keep on state and 1d on the pipeline group](docs/images/step-05-tags.png) -->
+![tags.tf with keep on state and 1d on the pipeline group](docs/images/step-05-tags.png)
 
 ### Step 6: Create the state resource group
 
@@ -99,7 +101,7 @@ Both groups get `owner = zeon` and `project = azure-terraform-pipeline-poc`. The
 
 `rg-tfpipe-state-zeon01` holds only the state account. The pipeline group is a later file. The first plan, before later files exist, is `1 to add`. Apply created the group in 29 seconds.
 
-<!-- ![rg-tfpipe-state-zeon01 in East US](docs/images/step-06-state-group.png) -->
+![rg-tfpipe-state-zeon01 in East US](docs/images/step-06-state-group.png)
 
 ### Step 7: Create the state storage account
 
@@ -107,7 +109,7 @@ Both groups get `owner = zeon` and `project = azure-terraform-pipeline-poc`. The
 
 `sttfpipezeon01` is Standard, locally redundant storage (LRS), HTTPS only, Transport Layer Security (TLS) 1.2. Shared keys are off. Anonymous public access is off. Blob versioning is on, with a seven-day delete retention. The plan was `1 to add`. Apply created the account in 27 seconds.
 
-<!-- ![sttfpipezeon01 with shared keys off](docs/images/step-07-storage-account.png) -->
+![sttfpipezeon01 with shared keys off](docs/images/step-07-storage-account.png)
 
 ### Step 8: Let the operator write blobs
 
@@ -115,7 +117,7 @@ Both groups get `owner = zeon` and `project = azure-terraform-pipeline-poc`. The
 
 The signed-in Azure CLI user gets Storage Blob Data Owner on `sttfpipezeon01`. Shared keys stay off. This role is how the laptop writes the container. `principal_id` is ignored after create, so a GitHub plan does not replace the assignment with the runner's identity. The plan was `1 to add`. Apply created the assignment in 34 seconds.
 
-<!-- ![Storage Blob Data Owner on the state account](docs/images/step-08-operator-role.png) -->
+![Storage Blob Data Owner on the state account](docs/images/step-08-operator-role.png)
 
 ### Step 9: Create the private container
 
@@ -123,7 +125,7 @@ The signed-in Azure CLI user gets Storage Blob Data Owner on `sttfpipezeon01`. S
 
 `tfstate` is private. It depends on the operator role because Terraform cannot see that permission from a value. The plan was `1 to add`. Apply created the container in 12 seconds.
 
-<!-- ![private tfstate container](docs/images/step-09-container.png) -->
+![private tfstate container](docs/images/step-09-container.png)
 
 ### Step 10: Register the GitHub app
 
@@ -131,7 +133,7 @@ The signed-in Azure CLI user gets Storage Blob Data Owner on `sttfpipezeon01`. S
 
 `github-actions-azure-terraform-pipeline-poc` is an Entra app in this tenant only (`AzureADMyOrg`). There is no client secret. The plan was `1 to add`. Apply created the registration in 1 second.
 
-<!-- ![app registration with no client secret](docs/images/step-10-app-registration.png) -->
+![app registration with no client secret](docs/images/step-10-app-registration.png)
 
 ### Step 11: Create the service principal
 
@@ -139,7 +141,7 @@ The signed-in Azure CLI user gets Storage Blob Data Owner on `sttfpipezeon01`. S
 
 A role assignment cannot point at the app registration. It points at this principal. `account_enabled` is true. The plan was `1 to add`. Apply created the principal in 4 seconds.
 
-<!-- ![enabled service principal](docs/images/step-11-service-principal.png) -->
+![enabled service principal](docs/images/step-11-service-principal.png)
 
 ### Step 12: Trust pull requests to plan
 
@@ -153,7 +155,7 @@ gh api repos/zsociety47/azure-terraform-pipeline-poc/actions/oidc/customization/
 
 This repository's prefix is `repo:zsociety47@122703085/azure-terraform-pipeline-poc@1428385149`. The pull-request subject adds `:pull_request`. Issuer `https://token.actions.githubusercontent.com`. Audience `api://AzureADTokenExchange`. The plan was `1 to add`. Apply created the credential in 8 seconds.
 
-<!-- ![github-pull-request federated credential](docs/images/step-12-pull-request-credential.png) -->
+![github-pull-request federated credential](docs/images/step-12-pull-request-credential.png)
 
 ### Step 13: Trust main to apply
 
@@ -161,7 +163,7 @@ This repository's prefix is `repo:zsociety47@122703085/azure-terraform-pipeline-
 
 Same issuer and audience. The subject ends in `:ref:refs/heads/main`. A pull request token will not match this credential. The plan was `1 to add`. Apply created the credential in 10 seconds.
 
-<!-- ![github-main federated credential](docs/images/step-13-main-credential.png) -->
+![github-main federated credential](docs/images/step-13-main-credential.png)
 
 ### Step 14: Let GitHub read and write state blobs
 
@@ -169,15 +171,15 @@ Same issuer and audience. The subject ends in `:ref:refs/heads/main`. A pull req
 
 The GitHub principal gets Storage Blob Data Contributor on `sttfpipezeon01`. That is a data-plane role. It cannot create resource groups. The plan was `1 to add`. Apply created the assignment in 32 seconds.
 
-<!-- ![Storage Blob Data Contributor for GitHub on the state account](docs/images/step-14-github-blob-role.png) -->
+![Storage Blob Data Contributor for GitHub on the state account](docs/images/step-14-github-blob-role.png)
 
 ### Step 15: Create the empty pipeline group
 
 *Declared in `pipeline_resource_group.tf`. Created by `terraform apply`.*
 
-`rg-tfpipe-poc-zeon01` is empty on purpose. A role cannot be scoped to a group that does not exist, and the GitHub principal is not allowed to create groups. The plan was `1 to add`. Apply created the group in 26 seconds. Step 16 then granted Contributor on this group.
+The group started empty so a role could be scoped to it. A role cannot be scoped to a group that does not exist, and the GitHub principal is not allowed to create groups. The plan was `1 to add`. Apply created the group in 26 seconds. Step 16 then granted Contributor on this group. Apply on `main` later created `sttfpipepoczeon01` here.
 
-<!-- ![empty rg-tfpipe-poc-zeon01](docs/images/step-15-pipeline-group.png) -->
+![rg-tfpipe-poc-zeon01 in East US with sttfpipepoczeon01 and lifetime 1d](docs/images/step-15-pipeline-group.png)
 
 ### Step 16: Let GitHub change only the pipeline group
 
@@ -185,7 +187,7 @@ The GitHub principal gets Storage Blob Data Contributor on `sttfpipezeon01`. Tha
 
 The GitHub principal gets Contributor on `rg-tfpipe-poc-zeon01`. Contributor can create, change, and delete resources in that group. The scope is the group, not the subscription, so this role cannot create other resource groups. This file needs the empty group from step 15 and the service principal from step 11. The later workflow files need this assignment before they can apply. The plan was `1 to add, 3 to change`. Apply added the role and updated the tags. The only role on this group is Contributor, and it is a service principal.
 
-<!-- ![Contributor for GitHub on rg-tfpipe-poc-zeon01](docs/images/step-16-pipeline-role.png) -->
+![Contributor for GitHub on rg-tfpipe-poc-zeon01](docs/images/step-16-pipeline-role.png)
 
 ### Step 17: Store state in Azure
 
@@ -195,7 +197,7 @@ The GitHub principal gets Contributor on `rg-tfpipe-poc-zeon01`. Contributor can
 
 This block cannot use variables. The names are the same literals as in `variables.tf`. `use_azuread_auth = true` is required because shared keys are off. The subscription id is not in the file. `terraform init -migrate-state` copied the local state into that blob. The container now lists `pipeline.tfstate`.
 
-<!-- ![backend.tf pointing at sttfpipezeon01](docs/images/step-17-backend.png) -->
+![backend.tf pointing at sttfpipezeon01](docs/images/step-17-backend.png)
 
 ### Step 18: Save the three GitHub secrets
 
@@ -218,7 +220,7 @@ az account show --query id -o tsv \
 
 `gh secret list` then shows three names: `AZURE_CLIENT_ID`, `AZURE_TENANT_ID`, `AZURE_SUBSCRIPTION_ID`.
 
-<!-- ![GitHub secret names only](docs/images/step-18-github-secrets.png) -->
+![GitHub secret names only](docs/images/step-18-github-secrets.png)
 
 ### Step 19: Plan on a pull request
 
@@ -226,11 +228,15 @@ az account show --query id -o tsv \
 
 The job checks format, initializes against `sttfpipezeon01`, validates, runs `terraform plan`, and runs `scripts/verify.sh`. It does not apply. A failed verify fails the job. Sign-in is OpenID Connect, the same three secrets as step 18. There is no GitHub environment on this job. An environment would change the token subject, and Azure would not match `github-pull-request`.
 
+![plan.yml with id-token write and no GitHub environment](docs/images/step-25-plan-yml.png)
+
 The plan comment strips subscription ids and other UUID-shaped identifiers before it is posted.
 
 GitHub runs this workflow from the pull-request branch. The first plan is that pull request, not a file that already has to live on `main`.
 
-<!-- ![Plan workflow on a pull request](docs/images/step-19-plan-job.png) -->
+![Plan workflow on a pull request](docs/images/step-19-plan-job.png)
+
+![Redacted terraform plan comment on the pull request](docs/images/step-19b-plan-comment.png)
 
 The first run signed in, initialized, and validated. Plan then failed with `403` on `resourceGroups/read` for `rg-tfpipe-state-zeon01`. Step 20 is the Reader role that fixes that. The next run posted a redacted plan on [pull request 1](https://github.com/zsociety47/azure-terraform-pipeline-poc/pull/1). That plan wanted to replace `operator_blob_owner`. Step 8 now ignores `principal_id` so the assignment stays on the operator. Shared keys stay off.
 
@@ -240,7 +246,7 @@ The first run signed in, initialized, and validated. Plan then failed with `403`
 
 Plan refreshes every resource in state, including the state group. The GitHub principal already had Storage Blob Data Contributor on `sttfpipezeon01` and Contributor on the pipeline group. Neither of those lets it read `rg-tfpipe-state-zeon01`. Reader on that group can see it and cannot change it. Contributor stays on the pipeline group only. The plan was `1 to add`. Apply added the assignment. The only role on the state group is Reader, and it is a service principal.
 
-<!-- ![Reader for GitHub on rg-tfpipe-state-zeon01](docs/images/step-20-state-reader.png) -->
+![Reader for GitHub on rg-tfpipe-state-zeon01](docs/images/step-20-state-reader.png)
 
 ### Step 21: Apply on main
 
@@ -250,7 +256,11 @@ The job repeats format, init, and validate, then runs `terraform apply`, then `s
 
 The first push that adds this file to `main` runs apply.
 
-<!-- ![Apply workflow on main](docs/images/step-21-apply-job.png) -->
+![apply.yml with concurrency apply-main and push to main only](docs/images/step-26-apply-yml.png)
+
+![Apply workflow on main](docs/images/step-21-apply-job.png)
+
+![Actions list with Plan on a pull request and Apply on main](docs/images/step-27-actions-list.png)
 
 ### Step 22: Verify the bootstrap
 
@@ -264,7 +274,7 @@ All twelve checks passed on the laptop after Apply created `sttfpipepoczeon01`. 
 ./scripts/verify.sh
 ```
 
-<!-- ![verify.sh pass/fail table](docs/images/step-22-verify.png) -->
+![verify.sh pass/fail table](docs/images/step-22-verify.png)
 
 ### Step 23: The resource the pipeline creates
 
@@ -272,7 +282,7 @@ All twelve checks passed on the laptop after Apply created `sttfpipepoczeon01`. 
 
 `sttfpipepoczeon01` is a storage account in `rg-tfpipe-poc-zeon01`. `st` is storage. `tfpipe` is this project. `poc` is proof of concept. `zeon01` is the owner. Shared keys are off. It is not the state account. [Pull request 2](https://github.com/zsociety47/azure-terraform-pipeline-poc/pull/2) planned `1 to add`. Apply on `main` added it: https://github.com/zsociety47/azure-terraform-pipeline-poc/actions/runs/40341623802
 
-<!-- ![sttfpipepoczeon01 in the pipeline group](docs/images/step-23-workload.png) -->
+![sttfpipepoczeon01 in the pipeline group](docs/images/step-23-workload.png)
 
 ### Step 24: Remove it
 
@@ -431,45 +441,40 @@ The picture above is the reference. The Mermaid below is the live map.
 
 ```mermaid
 flowchart LR
-    laptop["Operator laptop<br/>bootstrap"]
-    pr["Pull request<br/>plan and tests"]
-    main["Push to main<br/>apply"]
+    pr["Job 1 · pull request<br/>format, validate, plan, verify<br/>posts the plan on the PR"]
+    main["Job 2 · main only<br/>checks, apply, then verify"]
 
-    subgraph tenant["Microsoft Entra ID tenant"]
-        entra["github-actions-azure-terraform-pipeline-poc<br/>App registration"]
-        subgraph sub["Azure subscription"]
-            subgraph stateRg["rg-tfpipe-state-zeon01"]
-                state["sttfpipezeon01<br/>tfstate container"]
-            end
-            pipe["rg-tfpipe-poc-zeon01<br/>sttfpipepoczeon01"]
-        end
+    subgraph tenant["Microsoft Entra ID · the sign-in service"]
+        entra["github-actions-azure-terraform-pipeline-poc<br/>no client secret"]
+        prTrust["Trusts pull requests<br/>subject ends with :pull_request"]
+        mainTrust["Trusts the main branch<br/>subject ends with main"]
     end
 
-    laptop -. "terraform apply" .-> state
-    laptop -. "creates the app" .-> entra
-    laptop -. "creates the empty group" .-> pipe
-    pr -. "OpenID Connect token" .-> entra
-    main -. "OpenID Connect token" .-> entra
-    pr -. "read state · plan only" .-> state
+    subgraph azure["Microsoft Azure · East US"]
+        state["rg-tfpipe-state-zeon01<br/>sttfpipezeon01 · pipeline.tfstate"]
+        pipe["rg-tfpipe-poc-zeon01<br/>sttfpipepoczeon01"]
+    end
+
+    pr -. "OpenID Connect token" .-> prTrust
+    main -. "OpenID Connect token" .-> mainTrust
+    pr -. "read state" .-> state
     main -. "read and write state" .-> state
-    main -. "create and change" .-> pipe
+    main -- "create and change" --> pipe
 
     classDef azure fill:#0078d4,stroke:#005a9e,color:#fff
     classDef identity fill:#107c10,stroke:#0b5a0b,color:#fff
     classDef external fill:#6e7681,stroke:#57606a,color:#fff
-    class state,pipe,stateRg azure
-    class entra identity
-    class laptop,pr,main external
+    class state,pipe azure
+    class entra,prTrust,mainTrust identity
+    class pr,main external
 ```
 
 **How to read this diagram**
 
-- **Solid arrows** will be the request path once the workflows exist. They are not drawn yet because no application sits in the pipeline group.
-- **Dashed arrows** are the deploy path. The laptop already created the two groups and the app. A pull request will send an OpenID Connect token and read state. A push to `main` will send a different token and write state.
-- **Blue:** the two resource groups and the state account. **Green:** the Entra app. **Gray:** GitHub and the laptop.
+- **Solid arrows** are apply creating resources in the pipeline group. **Dashed arrows** are the deploy path: an OpenID Connect (OIDC) token, then state access.
+- **Gray:** the two GitHub jobs. **Green:** the Entra app and the two federated credentials. **Blue:** the two resource groups.
+- A pull request can read state and plan. Only `main` can write state and create `sttfpipepoczeon01`.
 - The state group is separate so destroying `rg-tfpipe-poc-zeon01` cannot delete the state file that destroy is using.
-
-*The blue boxes exist. Plan, apply, and verify run from GitHub. `sttfpipepoczeon01` is in the pipeline group.*
 
 *Diagram follows the [shared diagram standard](https://github.com/zsociety47/cloud-projects/blob/main/standards/DIAGRAM-STANDARD.md).*
 
