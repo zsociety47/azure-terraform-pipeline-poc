@@ -11,7 +11,7 @@ The walkthrough is not recorded yet.
 - **What it is:** Terraform that a pull request can plan, and that only the `main` branch can apply, with no Azure password stored in GitHub.
 - **What's automated:** the laptop already created the remote-state account, the empty pipeline group, and the Microsoft Entra ID app GitHub will use. A pull request runs format, validate, and plan. A push to `main` runs those checks, then apply.
 - **Why it's secure:** GitHub proves who it is with OpenID Connect (OIDC). There is no client secret. Shared keys are off on the state account. Destroying the pipeline group cannot delete the state file, because that file lives in a different group.
-- **Result:** both resource groups, the state account, and the app registration are in Azure. [Pull request 1](https://github.com/zsociety47/azure-terraform-pipeline-poc/pull/1) posted a plan and did not apply.
+- **Result:** both resource groups, the state account, and the app registration are in Azure. [Pull request 1](https://github.com/zsociety47/azure-terraform-pipeline-poc/pull/1) posted a plan and did not apply. A push to `main` applied with no changes.
 
 Part of [Cloud Projects](https://github.com/zsociety47/cloud-projects). Technical details are in [Technical findings](#technical-findings) at the bottom.
 
@@ -477,11 +477,11 @@ A pull request can plan and test a Terraform change, and only the `main` branch 
 | 6 | GitHub has Storage Blob Data Contributor on the state account | Role assignment on `sttfpipezeon01` | |
 | 7 | GitHub is Contributor on `rg-tfpipe-poc-zeon01` only | `az role assignment list` returns one row: `Contributor`, `ServicePrincipal` | ✅ [confirm the bootstrap](#confirm-the-bootstrap) |
 | 8 | A pull request posts `terraform plan` and does not apply | GitHub Actions run on a pull request | ✅ [pull request 1](https://github.com/zsociety47/azure-terraform-pipeline-poc/pull/1) |
-| 9 | A push to `main` applies only after the checks pass | GitHub Actions run on `main` | |
+| 9 | A push to `main` applies only after the checks pass | GitHub Actions run on `main` | ✅ [Apply run](https://github.com/zsociety47/azure-terraform-pipeline-poc/actions/runs/40339604773) |
 | 10 | Teardown removes the groups, the account, and the Entra app | `terraform destroy`, then the app is gone | |
 | 11 | Remote state is `pipeline.tfstate` in the `tfstate` container | `az storage blob list` prints `pipeline.tfstate` | ✅ [confirm the bootstrap](#confirm-the-bootstrap) |
 
-Criteria 1 through 4, 7, and 11 were checked on 25 October 2026. Criteria 5, 6, and 8 through 10 wait on screenshots or on files that are not in this repository.
+Criteria 1 through 4, 7 through 9, and 11 were checked on 25–26 October 2026. Criteria 5, 6, and 10 wait on screenshots or teardown.
 
 ## What's in this repository
 
