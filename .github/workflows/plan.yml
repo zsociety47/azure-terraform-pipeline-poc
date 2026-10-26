@@ -1,0 +1,79 @@
+# Pull requests plan and check. They do not apply.
+# Sign-in is OpenID Connect. The federated credential that matches
+# is github-pull-request. Do not set a GitHub environment here:
+# that would change the token subject and Azure would refuse it.
+
+name: Plan
+
+on:
+  pull_request:
+    branches: [main]
+
+permissions:
+  id-token: write
+  contents: read
+  pull-requests: write
+
+env:
+  ARM_USE_OIDC: true
+  ARM_USE_AZUREAD: true
+  ARM_CLIENT_ID: ${{ secrets.AZURE_CLIENT_ID }}
+  ARM_TENANT_ID: ${{ secrets.AZURE_TENANT_ID }}
+  ARM_SUBSCRIPTION_ID: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+
+jobs:
+  plan:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v7
+
+      - name: Install Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: 1.15.5
+          terraform_wrapper: false
+
+      - name: Sign in to Azure with OpenID Connect
+        uses: azure/login@v3
+        with:
+          client-id: ${{ secrets.AZURE_CLIENT_ID }}
+          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+
+      - name: Check format
+        run: terraform fmt -check -recursive
+
+      - name: Initialize
+        run: terraform init -input=false
+
+      - name: Validate
+        run: terraform validate
+
+      - name: Plan
+        run: |
+          set -euo pipefail
+          terraform plan -input=false -no-color | tee plan.txt
+
+      - name: Post the plan on the pull request
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          python3 <<'PY'
+          from pathlib import Path
+          import re
+          text = Path("plan.txt").read_text()
+          text = re.sub(r"/subscriptions/[0-9a-fA-F-]+", "/subscriptions/<id>", text)
+          text = re.sub(
+              r"[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}",
+              "<id>",
+              text,
+          )
+          Path("plan-comment.md").write_text(
+              "## Terraform plan\n\nThis job does not apply.\n\n```text\n"
+              + text
+              + "\n```\n"
+          )
+          PY
+          gh pr comment "${{ github.event.pull_request.number }}" --body-file plan-comment.md
