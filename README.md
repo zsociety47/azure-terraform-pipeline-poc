@@ -9,9 +9,9 @@ The walkthrough is not recorded yet.
 ## At a glance
 
 - **What it is:** Terraform that a pull request can plan, and that only the `main` branch can apply, with no Azure password stored in GitHub.
-- **What's automated:** the laptop already created the remote-state account, the empty pipeline group, and the Microsoft Entra ID app GitHub will use. A pull request runs format, validate, and plan. A push to `main` runs those checks, then apply.
+- **What's automated:** the laptop created the remote-state account, the pipeline group, and the Microsoft Entra ID app GitHub uses. A pull request runs format, validate, plan, and `scripts/verify.sh`. A push to `main` runs those checks, apply, then verify.
 - **Why it's secure:** GitHub proves who it is with OpenID Connect (OIDC). There is no client secret. Shared keys are off on the state account. Destroying the pipeline group cannot delete the state file, because that file lives in a different group.
-- **Result:** both resource groups, the state account, and the app registration are in Azure. [Pull request 1](https://github.com/zsociety47/azure-terraform-pipeline-poc/pull/1) posted a plan and did not apply. A push to `main` applied with no changes.
+- **Result:** both resource groups, the state account, and the app registration are in Azure. [Pull request 1](https://github.com/zsociety47/azure-terraform-pipeline-poc/pull/1) posted a plan and did not apply. [Pull request 2](https://github.com/zsociety47/azure-terraform-pipeline-poc/pull/2) planned `sttfpipepoczeon01`. Apply on `main` created it.
 
 Part of [Cloud Projects](https://github.com/zsociety47/cloud-projects). Technical details are in [Technical findings](#technical-findings) at the bottom.
 
@@ -224,7 +224,7 @@ az account show --query id -o tsv \
 
 *Declared in `.github/workflows/plan.yml`. Runs when a pull request targets `main`.*
 
-The job checks format, initializes against `sttfpipezeon01`, validates, and runs `terraform plan`. It does not apply. Sign-in is OpenID Connect, the same three secrets as step 18. There is no GitHub environment on this job. An environment would change the token subject, and Azure would not match `github-pull-request`.
+The job checks format, initializes against `sttfpipezeon01`, validates, runs `terraform plan`, and runs `scripts/verify.sh`. It does not apply. A failed verify fails the job. Sign-in is OpenID Connect, the same three secrets as step 18. There is no GitHub environment on this job. An environment would change the token subject, and Azure would not match `github-pull-request`.
 
 The plan comment strips subscription ids and other UUID-shaped identifiers before it is posted.
 
@@ -246,7 +246,7 @@ Plan refreshes every resource in state, including the state group. The GitHub pr
 
 *Declared in `.github/workflows/apply.yml`. Runs when someone pushes to `main`.*
 
-The job repeats format, init, and validate, then runs `terraform apply`. Pull requests cannot start this file. Sign-in is OpenID Connect. There is no GitHub environment on this job. An environment would change the token subject, and Azure would not match `github-main`. `concurrency` keeps two applies from writing state at the same time.
+The job repeats format, init, and validate, then runs `terraform apply`, then `scripts/verify.sh`. A failed verify fails the job. Pull requests cannot start this file. Sign-in is OpenID Connect. There is no GitHub environment on this job. An environment would change the token subject, and Azure would not match `github-main`. `concurrency` keeps two applies from writing state at the same time.
 
 The first push that adds this file to `main` runs apply.
 
@@ -258,7 +258,7 @@ The first push that adds this file to `main` runs apply.
 
 The script reads Azure. It does not create or delete anything. It checks both groups, the four tags, shared keys off, the state blob, the app registration, both federated credentials, and the GitHub roles. It does not print subscription ids.
 
-Eleven checks passed after `created` was written on both groups. Check 12 waits until the pipeline creates `sttfpipepoczeon01`.
+All twelve checks passed after Apply created `sttfpipepoczeon01`. The plan and apply jobs run this script. A failed check fails the job.
 
 ```bash
 ./scripts/verify.sh
@@ -270,7 +270,7 @@ Eleven checks passed after `created` was written on both groups. Check 12 waits 
 
 *Declared in `pipeline_storage.tf`. Created by the apply job on `main`, not by this laptop.*
 
-`sttfpipepoczeon01` is a storage account in `rg-tfpipe-poc-zeon01`. `st` is storage. `tfpipe` is this project. `poc` is proof of concept. `zeon01` is the owner. Shared keys are off. It is not the state account. GitHub is Contributor on this group, so it can create this account and cannot create other groups.
+`sttfpipepoczeon01` is a storage account in `rg-tfpipe-poc-zeon01`. `st` is storage. `tfpipe` is this project. `poc` is proof of concept. `zeon01` is the owner. Shared keys are off. It is not the state account. [Pull request 2](https://github.com/zsociety47/azure-terraform-pipeline-poc/pull/2) planned `1 to add`. Apply on `main` added it: https://github.com/zsociety47/azure-terraform-pipeline-poc/actions/runs/40341623802
 
 <!-- ![sttfpipepoczeon01 in the pipeline group](docs/images/step-23-workload.png) -->
 
@@ -414,7 +414,7 @@ Type the full word `yes` only after you read the destroy plan.
 | Check | Where to click | A pass looks like |
 |---|---|---|
 | 1. The state group exists in East US | **Resource groups**, `rg-tfpipe-state-zeon01` | Region East US. Tag `lifetime` is `keep` |
-| 2. The pipeline group exists and is empty | **Resource groups**, `rg-tfpipe-poc-zeon01` | No resources inside. Tag `lifetime` is `1d` |
+| 2. The pipeline group exists | **Resource groups**, `rg-tfpipe-poc-zeon01` | Contains `sttfpipepoczeon01`. Tag `lifetime` is `1d` |
 | 3. Shared keys are off | `sttfpipezeon01`, **Configuration** | Allow storage account key access is off |
 | 4. The container is private | `sttfpipezeon01`, **Containers**, `tfstate` | Access is private |
 | 5. The app has no client secret | **Microsoft Entra ID**, **App registrations**, `github-actions-azure-terraform-pipeline-poc` | Certificates and secrets lists no secret |
@@ -441,7 +441,7 @@ flowchart LR
             subgraph stateRg["rg-tfpipe-state-zeon01"]
                 state["sttfpipezeon01<br/>tfstate container"]
             end
-            pipe["rg-tfpipe-poc-zeon01<br/>empty group"]
+            pipe["rg-tfpipe-poc-zeon01<br/>sttfpipepoczeon01"]
         end
     end
 
@@ -469,7 +469,7 @@ flowchart LR
 - **Blue:** the two resource groups and the state account. **Green:** the Entra app. **Gray:** GitHub and the laptop.
 - The state group is separate so destroying `rg-tfpipe-poc-zeon01` cannot delete the state file that destroy is using.
 
-*The blue boxes exist. The plan job is on `main`. This push adds the apply job.*
+*The blue boxes exist. Plan, apply, and verify run from GitHub. `sttfpipepoczeon01` is in the pipeline group.*
 
 *Diagram follows the [shared diagram standard](https://github.com/zsociety47/cloud-projects/blob/main/standards/DIAGRAM-STANDARD.md).*
 
@@ -484,7 +484,7 @@ A pull request can plan and test a Terraform change, and only the `main` branch 
 | # | Criterion | How it is checked | Result |
 |---|-----------|-------------------|--------|
 | 1 | `rg-tfpipe-state-zeon01` exists | `az group exists --name rg-tfpipe-state-zeon01` prints `true` | ✅ [confirm the bootstrap](#confirm-the-bootstrap) |
-| 2 | `rg-tfpipe-poc-zeon01` exists and is empty | `az group exists --name rg-tfpipe-poc-zeon01` prints `true` | ✅ [confirm the bootstrap](#confirm-the-bootstrap) |
+| 2 | `rg-tfpipe-poc-zeon01` exists | `az group exists --name rg-tfpipe-poc-zeon01` prints `true` | ✅ `scripts/verify.sh` check 2 |
 | 3 | `sttfpipezeon01` has shared keys off and HTTPS only | `az storage account show` returns `sharedKeys` false and `httpsOnly` true | ✅ [confirm the bootstrap](#confirm-the-bootstrap) |
 | 4 | The app registration exists with no client secret | `az ad app list` returns `github-actions-azure-terraform-pipeline-poc` and `AzureADMyOrg` | ✅ [confirm the bootstrap](#confirm-the-bootstrap) |
 | 5 | Two federated credentials match this repository's OIDC subjects | Entra lists `github-pull-request` and `github-main` | ✅ `scripts/verify.sh` check 8 |
@@ -495,7 +495,7 @@ A pull request can plan and test a Terraform change, and only the `main` branch 
 | 10 | Teardown removes the groups, the account, and the Entra app | `terraform destroy`, then the app is gone | |
 | 11 | Remote state is `pipeline.tfstate` in the `tfstate` container | `az storage blob list` prints `pipeline.tfstate` | ✅ [confirm the bootstrap](#confirm-the-bootstrap) |
 
-Criteria 1 through 9 and 11 were checked on 25–26 October 2026. Criterion 10 waits on teardown. The two `created` tag checks in `scripts/verify.sh` still fail.
+Criteria 1 through 9 and 11 were checked on 25–26 October 2026. Check 12 of `scripts/verify.sh` passed after Apply created `sttfpipepoczeon01`. Criterion 10 waits on teardown.
 
 ## What's in this repository
 
@@ -515,7 +515,7 @@ Criteria 1 through 9 and 11 were checked on 25–26 October 2026. Criterion 10 w
 ├── pull_request_credential.tf  Trusts a pull-request OIDC token
 ├── main_credential.tf       Trusts a main-branch OIDC token
 ├── github_blob_role.tf      Storage Blob Data Contributor for GitHub
-├── pipeline_resource_group.tf  empty rg-tfpipe-poc-zeon01
+├── pipeline_resource_group.tf  rg-tfpipe-poc-zeon01
 ├── github_pipeline_role.tf  Contributor for GitHub on that group only
 ├── github_state_reader.tf   Reader for GitHub on the state group only
 ├── pipeline_storage.tf      sttfpipepoczeon01, created by the pipeline
@@ -549,7 +549,7 @@ A resource group, an app registration, and two role assignments have no hourly c
 
 ## Going further
 
-- Put `scripts/verify.sh` in the plan and apply jobs so a failed check stops apply. Those two `created` tag checks have to pass first.
+- Redraw the design picture so it matches the live files.
 
 ---
 

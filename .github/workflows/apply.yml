@@ -55,3 +55,9 @@ jobs:
 
       - name: Apply
         run: terraform apply -input=false -auto-approve -no-color
+
+      - name: Verify
+        run: |
+          set -euo pipefail
+          chmod +x scripts/verify.sh
+          ./scripts/verify.sh
