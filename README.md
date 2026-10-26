@@ -41,7 +41,7 @@ The bootstrap in this repository already exists in Azure. A fresh clone has no l
 
 `terraform init` downloads the providers into `.terraform/`. `terraform apply` writes `terraform.tfstate`. That file holds resource identifiers. Both the state file and `.terraform/` are ignored. `.terraform.lock.hcl` is not ignored.
 
-<!-- ![.gitignore excluding the state file and the provider folder](docs/images/step-01-gitignore.png) -->
+![.gitignore excluding the state file and the provider folder](docs/images/step-01-gitignore.png)
 
 ### Step 2: Pin the providers
 
