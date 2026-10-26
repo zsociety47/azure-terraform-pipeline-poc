@@ -9,7 +9,7 @@ The walkthrough is not recorded yet.
 ## At a glance
 
 - **What it is:** Terraform that a pull request can plan, and that only the `main` branch can apply, with no Azure password stored in GitHub.
-- **What's automated:** the laptop already created the remote-state account, the empty pipeline group, and the Microsoft Entra ID app GitHub will use. A pull request runs format, validate, and plan. Apply is not in this repository yet.
+- **What's automated:** the laptop already created the remote-state account, the empty pipeline group, and the Microsoft Entra ID app GitHub will use. A pull request runs format, validate, and plan. A push to `main` runs those checks, then apply.
 - **Why it's secure:** GitHub proves who it is with OpenID Connect (OIDC). There is no client secret. Shared keys are off on the state account. Destroying the pipeline group cannot delete the state file, because that file lives in a different group.
 - **Result:** both resource groups, the state account, and the app registration are in Azure. [Pull request 1](https://github.com/zsociety47/azure-terraform-pipeline-poc/pull/1) posted a plan and did not apply.
 
@@ -241,23 +241,32 @@ Plan refreshes every resource in state, including the state group. The GitHub pr
 
 <!-- ![Reader for GitHub on rg-tfpipe-state-zeon01](docs/images/step-20-state-reader.png) -->
 
-### Step 21: What is not in this repository yet
+### Step 21: Apply on main
+
+*Declared in `.github/workflows/apply.yml`. Runs when someone pushes to `main`.*
+
+The job repeats format, init, and validate, then runs `terraform apply`. Pull requests cannot start this file. Sign-in is OpenID Connect. There is no GitHub environment on this job. An environment would change the token subject, and Azure would not match `github-main`. `concurrency` keeps two applies from writing state at the same time.
+
+The first push that adds this file to `main` runs apply.
+
+<!-- ![Apply workflow on main](docs/images/step-21-apply-job.png) -->
+
+### Step 22: What is not in this repository yet
 
 These files come next, in this order. None of them has been written.
 
-1. A `main` workflow that runs `terraform apply` only after those checks pass.
-2. A verify script the pipeline can run.
-3. The small Azure resource the pipeline actually creates.
+1. A verify script the pipeline can run.
+2. The small Azure resource the pipeline actually creates.
 
-<!-- ![planned apply job on main](docs/images/step-21-apply-job.png) -->
+<!-- ![planned verify script](docs/images/step-22-verify.png) -->
 
-### Step 22: Remove it
+### Step 23: Remove it
 
 *Run `terraform destroy` only after you type a confirmation. The nightly sweep cannot delete the Entra app or the federated credentials.*
 
 Destroy the pipeline group first if you want to keep the state file. Destroying `rg-tfpipe-state-zeon01` deletes the state account. After destroy, the Entra app registration still has to be removed if Terraform no longer tracks it.
 
-<!-- ![destroy complete](docs/images/step-22-destroy.png) -->
+<!-- ![destroy complete](docs/images/step-23-destroy.png) -->
 
 ---
 
@@ -378,7 +387,7 @@ A pass looks like one row: `Contributor`, `ServicePrincipal`.
 
 ### Remove it
 
-This is step 22. Do not run it unless you mean to delete the state account, both groups, the role assignments, and the Entra objects Terraform still tracks. After state is remote, destroy still reads that same blob. Destroying `rg-tfpipe-state-zeon01` last is what removes the account the backend is using.
+This is step 23. Do not run it unless you mean to delete the state account, both groups, the role assignments, and the Entra objects Terraform still tracks. After state is remote, destroy still reads that same blob. Destroying `rg-tfpipe-state-zeon01` last is what removes the account the backend is using.
 
 ```bash
 terraform destroy
@@ -446,7 +455,7 @@ flowchart LR
 - **Blue:** the two resource groups and the state account. **Green:** the Entra app. **Gray:** GitHub and the laptop.
 - The state group is separate so destroying `rg-tfpipe-poc-zeon01` cannot delete the state file that destroy is using.
 
-*The blue boxes exist. This pull request adds the plan job and the state-group Reader. The apply job is not written.*
+*The blue boxes exist. The plan job is on `main`. This push adds the apply job.*
 
 *Diagram follows the [shared diagram standard](https://github.com/zsociety47/cloud-projects/blob/main/standards/DIAGRAM-STANDARD.md).*
 
@@ -496,7 +505,8 @@ Criteria 1 through 4, 7, and 11 were checked on 25 October 2026. Criteria 5, 6, 
 ├── github_pipeline_role.tf  Contributor for GitHub on that group only
 ├── github_state_reader.tf   Reader for GitHub on the state group only
 ├── backend.tf               Remote state in sttfpipezeon01 / tfstate
-├── .github/workflows/plan.yml  Pull request: format, validate, plan. No apply
+├── .github/workflows/plan.yml   Pull request: format, validate, plan. No apply
+├── .github/workflows/apply.yml  main: those checks, then apply
 ├── .terraform.lock.hcl      Exact provider builds selected by terraform init
 └── docs/
     └── architecture/
@@ -523,8 +533,7 @@ A resource group, an app registration, and two role assignments have no hourly c
 
 ## Going further
 
-- Add the `main` apply job, after this plan file is on `main`.
-- Put the verify checks in those jobs so a failed check stops apply.
+- Put the verify checks in the plan and apply jobs so a failed check stops apply.
 
 ---
 
