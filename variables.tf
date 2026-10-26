@@ -18,7 +18,7 @@ variable "state_resource_group_name" {
 }
 
 variable "pipeline_resource_group_name" {
-  description = "Empty resource group created locally so the pipeline can be granted access to it. The pipeline cannot create this group."
+  description = "Resource group the pipeline is allowed to change. The pipeline cannot create this group."
   type        = string
   default     = "rg-tfpipe-poc-zeon01"
 }
@@ -27,6 +27,12 @@ variable "storage_account_name" {
   description = "Storage account for the Terraform state blob. Lowercase letters and digits only."
   type        = string
   default     = "sttfpipezeon01"
+}
+
+variable "pipeline_storage_account_name" {
+  description = "Storage account the pipeline creates inside the pipeline group. Not the state account."
+  type        = string
+  default     = "sttfpipepoczeon01"
 }
 
 variable "storage_container_name" {
