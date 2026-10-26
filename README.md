@@ -231,7 +231,17 @@ GitHub runs this workflow from the pull-request branch. The first plan is that p
 
 <!-- ![Plan workflow on a pull request](docs/images/step-19-plan-job.png) -->
 
-### Step 20: What is not in this repository yet
+The first run signed in, initialized, and validated. Plan then failed with `403` on `resourceGroups/read` for `rg-tfpipe-state-zeon01`. Step 20 is the Reader role that fixes that.
+
+### Step 20: Let GitHub read the state group
+
+*Declared in `github_state_reader.tf`. Created by `terraform apply`.*
+
+Plan refreshes every resource in state, including the state group. The GitHub principal already had Storage Blob Data Contributor on `sttfpipezeon01` and Contributor on the pipeline group. Neither of those lets it read `rg-tfpipe-state-zeon01`. Reader on that group can see it and cannot change it. Contributor stays on the pipeline group only. The plan was `1 to add`. Apply added the assignment. The only role on the state group is Reader, and it is a service principal.
+
+<!-- ![Reader for GitHub on rg-tfpipe-state-zeon01](docs/images/step-20-state-reader.png) -->
+
+### Step 21: What is not in this repository yet
 
 These files come next, in this order. None of them has been written.
 
@@ -239,15 +249,15 @@ These files come next, in this order. None of them has been written.
 2. A verify script the pipeline can run.
 3. The small Azure resource the pipeline actually creates.
 
-<!-- ![planned apply job on main](docs/images/step-20-apply-job.png) -->
+<!-- ![planned apply job on main](docs/images/step-21-apply-job.png) -->
 
-### Step 21: Remove it
+### Step 22: Remove it
 
 *Run `terraform destroy` only after you type a confirmation. The nightly sweep cannot delete the Entra app or the federated credentials.*
 
 Destroy the pipeline group first if you want to keep the state file. Destroying `rg-tfpipe-state-zeon01` deletes the state account. After destroy, the Entra app registration still has to be removed if Terraform no longer tracks it.
 
-<!-- ![destroy complete](docs/images/step-21-destroy.png) -->
+<!-- ![destroy complete](docs/images/step-22-destroy.png) -->
 
 ---
 
@@ -368,7 +378,7 @@ A pass looks like one row: `Contributor`, `ServicePrincipal`.
 
 ### Remove it
 
-This is step 21. Do not run it unless you mean to delete the state account, both groups, the role assignments, and the Entra objects Terraform still tracks. After state is remote, destroy still reads that same blob. Destroying `rg-tfpipe-state-zeon01` last is what removes the account the backend is using.
+This is step 22. Do not run it unless you mean to delete the state account, both groups, the role assignments, and the Entra objects Terraform still tracks. After state is remote, destroy still reads that same blob. Destroying `rg-tfpipe-state-zeon01` last is what removes the account the backend is using.
 
 ```bash
 terraform destroy
@@ -436,7 +446,7 @@ flowchart LR
 - **Blue:** the two resource groups and the state account. **Green:** the Entra app. **Gray:** GitHub and the laptop.
 - The state group is separate so destroying `rg-tfpipe-poc-zeon01` cannot delete the state file that destroy is using.
 
-*The blue boxes exist. This pull request adds the plan job. The apply job is not written.*
+*The blue boxes exist. This pull request adds the plan job and the state-group Reader. The apply job is not written.*
 
 *Diagram follows the [shared diagram standard](https://github.com/zsociety47/cloud-projects/blob/main/standards/DIAGRAM-STANDARD.md).*
 
@@ -484,6 +494,7 @@ Criteria 1 through 4, 7, and 11 were checked on 25 October 2026. Criteria 5, 6, 
 ├── github_blob_role.tf      Storage Blob Data Contributor for GitHub
 ├── pipeline_resource_group.tf  empty rg-tfpipe-poc-zeon01
 ├── github_pipeline_role.tf  Contributor for GitHub on that group only
+├── github_state_reader.tf   Reader for GitHub on the state group only
 ├── backend.tf               Remote state in sttfpipezeon01 / tfstate
 ├── .github/workflows/plan.yml  Pull request: format, validate, plan. No apply
 ├── .terraform.lock.hcl      Exact provider builds selected by terraform init
