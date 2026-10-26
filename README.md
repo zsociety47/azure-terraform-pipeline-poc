@@ -11,7 +11,7 @@ The walkthrough is not recorded yet.
 - **What it is:** Terraform that a pull request can plan, and that only the `main` branch can apply, with no Azure password stored in GitHub.
 - **What's automated:** the laptop already created the remote-state account, the empty pipeline group, and the Microsoft Entra ID app GitHub will use. A pull request runs format, validate, and plan. Apply is not in this repository yet.
 - **Why it's secure:** GitHub proves who it is with OpenID Connect (OIDC). There is no client secret. Shared keys are off on the state account. Destroying the pipeline group cannot delete the state file, because that file lives in a different group.
-- **Result:** both resource groups, the state account, and the app registration are in Azure. A pull request has not yet posted a plan.
+- **Result:** both resource groups, the state account, and the app registration are in Azure. [Pull request 1](https://github.com/zsociety47/azure-terraform-pipeline-poc/pull/1) posted a plan and did not apply.
 
 Part of [Cloud Projects](https://github.com/zsociety47/cloud-projects). Technical details are in [Technical findings](#technical-findings) at the bottom.
 
@@ -112,7 +112,7 @@ Both groups get `owner = zeon` and `project = azure-terraform-pipeline-poc`. The
 
 *Declared in `operator_blob_role.tf`. Created by `terraform apply`.*
 
-The signed-in Azure CLI user gets Storage Blob Data Owner on `sttfpipezeon01`. Shared keys are off, so this role is the only way the laptop can create the container. The plan was `1 to add`. Apply created the assignment in 34 seconds.
+The signed-in Azure CLI user gets Storage Blob Data Owner on `sttfpipezeon01`. Shared keys stay off. This role is how the laptop writes the container. `principal_id` is ignored after create, so a GitHub plan does not replace the assignment with the runner's identity. The plan was `1 to add`. Apply created the assignment in 34 seconds.
 
 <!-- ![Storage Blob Data Owner on the state account](docs/images/step-08-operator-role.png) -->
 
@@ -231,7 +231,7 @@ GitHub runs this workflow from the pull-request branch. The first plan is that p
 
 <!-- ![Plan workflow on a pull request](docs/images/step-19-plan-job.png) -->
 
-The first run signed in, initialized, and validated. Plan then failed with `403` on `resourceGroups/read` for `rg-tfpipe-state-zeon01`. Step 20 is the Reader role that fixes that.
+The first run signed in, initialized, and validated. Plan then failed with `403` on `resourceGroups/read` for `rg-tfpipe-state-zeon01`. Step 20 is the Reader role that fixes that. The next run posted a redacted plan on [pull request 1](https://github.com/zsociety47/azure-terraform-pipeline-poc/pull/1). That plan wanted to replace `operator_blob_owner`. Step 8 now ignores `principal_id` so the assignment stays on the operator. Shared keys stay off.
 
 ### Step 20: Let GitHub read the state group
 
@@ -467,7 +467,7 @@ A pull request can plan and test a Terraform change, and only the `main` branch 
 | 5 | Two federated credentials match this repository's OIDC subjects | Entra lists `github-pull-request` and `github-main` | |
 | 6 | GitHub has Storage Blob Data Contributor on the state account | Role assignment on `sttfpipezeon01` | |
 | 7 | GitHub is Contributor on `rg-tfpipe-poc-zeon01` only | `az role assignment list` returns one row: `Contributor`, `ServicePrincipal` | ✅ [confirm the bootstrap](#confirm-the-bootstrap) |
-| 8 | A pull request posts `terraform plan` and does not apply | GitHub Actions run on a pull request | |
+| 8 | A pull request posts `terraform plan` and does not apply | GitHub Actions run on a pull request | ✅ [pull request 1](https://github.com/zsociety47/azure-terraform-pipeline-poc/pull/1) |
 | 9 | A push to `main` applies only after the checks pass | GitHub Actions run on `main` | |
 | 10 | Teardown removes the groups, the account, and the Entra app | `terraform destroy`, then the app is gone | |
 | 11 | Remote state is `pipeline.tfstate` in the `tfstate` container | `az storage blob list` prints `pipeline.tfstate` | ✅ [confirm the bootstrap](#confirm-the-bootstrap) |
