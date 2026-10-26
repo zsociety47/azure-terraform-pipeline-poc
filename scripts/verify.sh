@@ -118,35 +118,42 @@ else
   fail 6 "Blob ${state_blob} is in ${container_name}"
 fi
 
-app_facts="$(az ad app list \
-  --display-name "$app_name" \
-  --query "[0].{audience:signInAudience, secrets:length(passwordCredentials)}" \
-  -o json 2>/dev/null || echo '{}')"
-app_pass="$(printf '%s' "$app_facts" | python3 -c '
+# The GitHub runner can sign in with OpenID Connect. It cannot
+# read Microsoft Entra ID applications. Checks 7 and 8 run on
+# the laptop. They are skipped, not failed, on the runner.
+skip() { printf '%s  %s: SKIP\n' "$1" "$2"; }
+
+app_object_id="$(az ad app list --display-name "$app_name" --query "[0].id" -o tsv 2>/dev/null || true)"
+if [[ -z "$app_object_id" ]]; then
+  skip 7 "${app_name} is AzureADMyOrg with no client secret (this login cannot read Microsoft Entra ID)"
+  skip 8 "Federated credentials github-pull-request and github-main exist (this login cannot read Microsoft Entra ID)"
+else
+  app_facts="$(az ad app list \
+    --display-name "$app_name" \
+    --query "[0].{audience:signInAudience, secrets:length(passwordCredentials)}" \
+    -o json 2>/dev/null || echo '{}')"
+  app_pass="$(printf '%s' "$app_facts" | python3 -c '
 import json, sys
 facts = json.load(sys.stdin)
 print("yes" if facts.get("audience") == "AzureADMyOrg" and facts.get("secrets") == 0 else "no")
 ')"
-if [[ "$app_pass" == "yes" ]]; then
-  pass 7 "${app_name} is AzureADMyOrg with no client secret"
-else
-  fail 7 "${app_name} is AzureADMyOrg with no client secret"
-fi
+  if [[ "$app_pass" == "yes" ]]; then
+    pass 7 "${app_name} is AzureADMyOrg with no client secret"
+  else
+    fail 7 "${app_name} is AzureADMyOrg with no client secret"
+  fi
 
-app_object_id="$(az ad app list --display-name "$app_name" --query "[0].id" -o tsv 2>/dev/null || true)"
-cred_names="[]"
-if [[ -n "$app_object_id" ]]; then
   cred_names="$(az ad app federated-credential list --id "$app_object_id" --query "[].name" -o json 2>/dev/null || echo '[]')"
-fi
-cred_pass="$(printf '%s' "$cred_names" | python3 -c '
+  cred_pass="$(printf '%s' "$cred_names" | python3 -c '
 import json, sys
 names = set(json.load(sys.stdin))
 print("yes" if {"github-pull-request", "github-main"} <= names else "no")
 ')"
-if [[ "$cred_pass" == "yes" ]]; then
-  pass 8 "Federated credentials github-pull-request and github-main exist"
-else
-  fail 8 "Federated credentials github-pull-request and github-main exist"
+  if [[ "$cred_pass" == "yes" ]]; then
+    pass 8 "Federated credentials github-pull-request and github-main exist"
+  else
+    fail 8 "Federated credentials github-pull-request and github-main exist"
+  fi
 fi
 
 # The storage account id includes a subscription id. It is used as

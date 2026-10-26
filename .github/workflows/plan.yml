@@ -55,12 +55,6 @@ jobs:
           set -euo pipefail
           terraform plan -input=false -no-color | tee plan.txt
 
-      - name: Verify
-        run: |
-          set -euo pipefail
-          chmod +x scripts/verify.sh
-          ./scripts/verify.sh
-
       - name: Post the plan on the pull request
         env:
           GH_TOKEN: ${{ github.token }}
@@ -83,3 +77,9 @@ jobs:
           )
           PY
           gh pr comment "${{ github.event.pull_request.number }}" --body-file plan-comment.md
+
+      - name: Verify
+        run: |
+          set -euo pipefail
+          chmod +x scripts/verify.sh
+          ./scripts/verify.sh

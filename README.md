@@ -258,7 +258,7 @@ The first push that adds this file to `main` runs apply.
 
 The script reads Azure. It does not create or delete anything. It checks both groups, the four tags, shared keys off, the state blob, the app registration, both federated credentials, and the GitHub roles. It does not print subscription ids.
 
-All twelve checks passed after Apply created `sttfpipepoczeon01`. The plan and apply jobs run this script. A failed check fails the job.
+All twelve checks passed on the laptop after Apply created `sttfpipepoczeon01`. The plan and apply jobs run this script. Checks 7 and 8 need Microsoft Entra ID read access, which the GitHub principal does not have, so those two are skipped on the runner. A failed Azure check still fails the job.
 
 ```bash
 ./scripts/verify.sh
