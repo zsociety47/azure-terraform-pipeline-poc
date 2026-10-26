@@ -74,6 +74,7 @@ The providers use the Azure CLI login already on the machine. There is no `subsc
 | State resource group | `rg-tfpipe-state-zeon01` |
 | Pipeline resource group | `rg-tfpipe-poc-zeon01` |
 | Storage account | `sttfpipezeon01` |
+| Pipeline storage account | `sttfpipepoczeon01` |
 | Container | `tfstate` |
 | State blob | `pipeline.tfstate` |
 | Region | East US |
@@ -251,22 +252,35 @@ The first push that adds this file to `main` runs apply.
 
 <!-- ![Apply workflow on main](docs/images/step-21-apply-job.png) -->
 
-### Step 22: What is not in this repository yet
+### Step 22: Verify the bootstrap
 
-These files come next, in this order. None of them has been written.
+*Declared in `scripts/verify.sh`. Run from this folder after `az login`.*
 
-1. A verify script the pipeline can run.
-2. The small Azure resource the pipeline actually creates.
+The script reads Azure. It does not create or delete anything. It checks both groups, the four tags, shared keys off, the state blob, the app registration, both federated credentials, and the GitHub roles. It does not print subscription ids.
 
-<!-- ![planned verify script](docs/images/step-22-verify.png) -->
+Eleven checks passed after `created` was written on both groups. Check 12 waits until the pipeline creates `sttfpipepoczeon01`.
 
-### Step 23: Remove it
+```bash
+./scripts/verify.sh
+```
+
+<!-- ![verify.sh pass/fail table](docs/images/step-22-verify.png) -->
+
+### Step 23: The resource the pipeline creates
+
+*Declared in `pipeline_storage.tf`. Created by the apply job on `main`, not by this laptop.*
+
+`sttfpipepoczeon01` is a storage account in `rg-tfpipe-poc-zeon01`. `st` is storage. `tfpipe` is this project. `poc` is proof of concept. `zeon01` is the owner. Shared keys are off. It is not the state account. GitHub is Contributor on this group, so it can create this account and cannot create other groups.
+
+<!-- ![sttfpipepoczeon01 in the pipeline group](docs/images/step-23-workload.png) -->
+
+### Step 24: Remove it
 
 *Run `terraform destroy` only after you type a confirmation. The nightly sweep cannot delete the Entra app or the federated credentials.*
 
 Destroy the pipeline group first if you want to keep the state file. Destroying `rg-tfpipe-state-zeon01` deletes the state account. After destroy, the Entra app registration still has to be removed if Terraform no longer tracks it.
 
-<!-- ![destroy complete](docs/images/step-23-destroy.png) -->
+<!-- ![destroy complete](docs/images/step-24-destroy.png) -->
 
 ---
 
@@ -387,7 +401,7 @@ A pass looks like one row: `Contributor`, `ServicePrincipal`.
 
 ### Remove it
 
-This is step 23. Do not run it unless you mean to delete the state account, both groups, the role assignments, and the Entra objects Terraform still tracks. After state is remote, destroy still reads that same blob. Destroying `rg-tfpipe-state-zeon01` last is what removes the account the backend is using.
+This is step 24. Do not run it unless you mean to delete the state account, both groups, the role assignments, and the Entra objects Terraform still tracks. After state is remote, destroy still reads that same blob. Destroying `rg-tfpipe-state-zeon01` last is what removes the account the backend is using.
 
 ```bash
 terraform destroy
@@ -473,15 +487,15 @@ A pull request can plan and test a Terraform change, and only the `main` branch 
 | 2 | `rg-tfpipe-poc-zeon01` exists and is empty | `az group exists --name rg-tfpipe-poc-zeon01` prints `true` | ✅ [confirm the bootstrap](#confirm-the-bootstrap) |
 | 3 | `sttfpipezeon01` has shared keys off and HTTPS only | `az storage account show` returns `sharedKeys` false and `httpsOnly` true | ✅ [confirm the bootstrap](#confirm-the-bootstrap) |
 | 4 | The app registration exists with no client secret | `az ad app list` returns `github-actions-azure-terraform-pipeline-poc` and `AzureADMyOrg` | ✅ [confirm the bootstrap](#confirm-the-bootstrap) |
-| 5 | Two federated credentials match this repository's OIDC subjects | Entra lists `github-pull-request` and `github-main` | |
-| 6 | GitHub has Storage Blob Data Contributor on the state account | Role assignment on `sttfpipezeon01` | |
+| 5 | Two federated credentials match this repository's OIDC subjects | Entra lists `github-pull-request` and `github-main` | ✅ `scripts/verify.sh` check 8 |
+| 6 | GitHub has Storage Blob Data Contributor on the state account | Role assignment on `sttfpipezeon01` | ✅ `scripts/verify.sh` check 9 |
 | 7 | GitHub is Contributor on `rg-tfpipe-poc-zeon01` only | `az role assignment list` returns one row: `Contributor`, `ServicePrincipal` | ✅ [confirm the bootstrap](#confirm-the-bootstrap) |
 | 8 | A pull request posts `terraform plan` and does not apply | GitHub Actions run on a pull request | ✅ [pull request 1](https://github.com/zsociety47/azure-terraform-pipeline-poc/pull/1) |
 | 9 | A push to `main` applies only after the checks pass | GitHub Actions run on `main` | ✅ [Apply run](https://github.com/zsociety47/azure-terraform-pipeline-poc/actions/runs/40339604773) |
 | 10 | Teardown removes the groups, the account, and the Entra app | `terraform destroy`, then the app is gone | |
 | 11 | Remote state is `pipeline.tfstate` in the `tfstate` container | `az storage blob list` prints `pipeline.tfstate` | ✅ [confirm the bootstrap](#confirm-the-bootstrap) |
 
-Criteria 1 through 4, 7 through 9, and 11 were checked on 25–26 October 2026. Criteria 5, 6, and 10 wait on screenshots or teardown.
+Criteria 1 through 9 and 11 were checked on 25–26 October 2026. Criterion 10 waits on teardown. The two `created` tag checks in `scripts/verify.sh` still fail.
 
 ## What's in this repository
 
@@ -504,9 +518,11 @@ Criteria 1 through 4, 7 through 9, and 11 were checked on 25–26 October 2026. 
 ├── pipeline_resource_group.tf  empty rg-tfpipe-poc-zeon01
 ├── github_pipeline_role.tf  Contributor for GitHub on that group only
 ├── github_state_reader.tf   Reader for GitHub on the state group only
+├── pipeline_storage.tf      sttfpipepoczeon01, created by the pipeline
 ├── backend.tf               Remote state in sttfpipezeon01 / tfstate
 ├── .github/workflows/plan.yml   Pull request: format, validate, plan. No apply
 ├── .github/workflows/apply.yml  main: those checks, then apply
+├── scripts/verify.sh            Live Azure checks. Does not apply
 ├── .terraform.lock.hcl      Exact provider builds selected by terraform init
 └── docs/
     └── architecture/
@@ -533,7 +549,7 @@ A resource group, an app registration, and two role assignments have no hourly c
 
 ## Going further
 
-- Put the verify checks in the plan and apply jobs so a failed check stops apply.
+- Put `scripts/verify.sh` in the plan and apply jobs so a failed check stops apply. Those two `created` tag checks have to pass first.
 
 ---
 
