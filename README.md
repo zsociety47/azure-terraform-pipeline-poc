@@ -11,7 +11,7 @@ The walkthrough is not recorded yet.
 - **What it is:** Terraform that a pull request can plan, and that only the `main` branch can apply, with no Azure password stored in GitHub.
 - **What's automated:** the laptop created the remote-state account, the pipeline group, and the Microsoft Entra ID app GitHub uses. A pull request runs format, validate, plan, and `scripts/verify.sh`. A push to `main` runs those checks, apply, then verify.
 - **Why it's secure:** GitHub proves who it is with OpenID Connect (OIDC). There is no client secret. Shared keys are off on the state account. Destroying the pipeline group cannot delete the state file, because that file lives in a different group.
-- **Result:** both resource groups, the state account, and the app registration are in Azure. [Pull request 1](https://github.com/zsociety47/azure-terraform-pipeline-poc/pull/1) posted a plan and did not apply. [Pull request 2](https://github.com/zsociety47/azure-terraform-pipeline-poc/pull/2) planned `sttfpipepoczeon01`. Apply on `main` created it.
+- **Result:** [Pull request 1](https://github.com/zsociety47/azure-terraform-pipeline-poc/pull/1) posted a plan and did not apply. [Pull request 2](https://github.com/zsociety47/azure-terraform-pipeline-poc/pull/2) planned `sttfpipepoczeon01`. Apply on `main` created it. Teardown on 26 October 2026 removed both groups and the Entra app.
 
 Part of [Cloud Projects](https://github.com/zsociety47/cloud-projects). Technical details are in [Technical findings](#technical-findings) at the bottom.
 
@@ -19,7 +19,7 @@ The design picture below is the reference. It comes from the Claude Design canva
 
 ![Design picture of GitHub planning and applying Terraform into Azure](docs/architecture/architecture.png)
 
-*Reference picture. On that picture, a solid box is built and working. Teardown and a branch rule that requires the plan check are still open.*
+*Reference picture. On that picture, a solid box is built and working. A branch rule that requires the plan check is still open. Teardown is done.*
 
 ---
 
@@ -288,9 +288,9 @@ All twelve checks passed on the laptop after Apply created `sttfpipepoczeon01`. 
 
 *Run `terraform destroy` only after you type a confirmation. The nightly sweep cannot delete the Entra app or the federated credentials.*
 
-Destroy the pipeline group first if you want to keep the state file. Destroying `rg-tfpipe-state-zeon01` deletes the state account. After destroy, the Entra app registration still has to be removed if Terraform no longer tracks it.
+One `terraform destroy` of this configuration is the teardown. Terraform deletes in reverse dependency order. Destroy the pipeline group first only if you want to keep the remote state file. Destroying `rg-tfpipe-state-zeon01` deletes the state account. After that account is gone, Terraform cannot write state back, so the Entra app may need a second destroy from the local recovery file. Do not use `az group delete` as a shortcut: the Entra app and federated credentials live outside the groups.
 
-<!-- ![destroy complete](docs/images/step-24-destroy.png) -->
+![destroy complete](docs/images/step-24-destroy.png)
 
 ---
 
@@ -411,7 +411,7 @@ A pass looks like one row: `Contributor`, `ServicePrincipal`.
 
 ### Remove it
 
-This is step 24. Do not run it unless you mean to delete the state account, both groups, the role assignments, and the Entra objects Terraform still tracks. After state is remote, destroy still reads that same blob. Destroying `rg-tfpipe-state-zeon01` last is what removes the account the backend is using.
+This is step 24. Do not run it unless you mean to delete the state account, both groups, the role assignments, and the Entra objects Terraform still tracks. After state is remote, destroy still reads that same blob. Destroying `rg-tfpipe-state-zeon01` last is what removes the account the backend is using. When that account goes away mid-destroy, Terraform writes `errored.tfstate` locally. Finish the remaining Entra objects from that file. Do not use `az group delete`.
 
 ```bash
 terraform destroy
@@ -497,10 +497,10 @@ A pull request can plan and test a Terraform change, and only the `main` branch 
 | 7 | GitHub is Contributor on `rg-tfpipe-poc-zeon01` only | `az role assignment list` returns one row: `Contributor`, `ServicePrincipal` | ✅ [confirm the bootstrap](#confirm-the-bootstrap) |
 | 8 | A pull request posts `terraform plan` and does not apply | GitHub Actions run on a pull request | ✅ [pull request 1](https://github.com/zsociety47/azure-terraform-pipeline-poc/pull/1) |
 | 9 | A push to `main` applies only after the checks pass | GitHub Actions run on `main` | ✅ [Apply run](https://github.com/zsociety47/azure-terraform-pipeline-poc/actions/runs/40339604773) |
-| 10 | Teardown removes the groups, the account, and the Entra app | `terraform destroy`, then the app is gone | |
+| 10 | Teardown removes the groups, the account, and the Entra app | `terraform destroy`, then the app is gone | ✅ [step 24](#step-24-remove-it) |
 | 11 | Remote state is `pipeline.tfstate` in the `tfstate` container | `az storage blob list` prints `pipeline.tfstate` | ✅ [confirm the bootstrap](#confirm-the-bootstrap) |
 
-Criteria 1 through 9 and 11 were checked on 25–26 October 2026. Check 12 of `scripts/verify.sh` passed after Apply created `sttfpipepoczeon01`. Criterion 10 waits on teardown.
+Criteria 1 through 9 and 11 were checked on 25–26 October 2026. Check 12 of `scripts/verify.sh` passed after Apply created `sttfpipepoczeon01`. Criterion 10: both groups `az group exists` printed `false`, and `az ad app list` for `github-actions-azure-terraform-pipeline-poc` was empty, on 26 October 2026.
 
 ## What's in this repository
 
@@ -567,5 +567,6 @@ A resource group, an app registration, and two role assignments have no hourly c
 - **The OIDC subject is not `repo:owner/name`.** GitHub sent `repo:zsociety47@122703085/azure-terraform-pipeline-poc@1428385149`. A name-only federated credential would fail with no matching record.
 - **The pipeline cannot create the group it deploys into.** The GitHub principal has no permission to create resource groups. `rg-tfpipe-poc-zeon01` was created on the laptop so a later role can be scoped to it.
 - **State cannot live in the group the pipeline destroys.** `rg-tfpipe-state-zeon01` holds the account. Destroying the pipeline group leaves the state file in place.
+- **One destroy of the whole config deleted both groups, then failed to save state.** The state account was already gone, so Terraform returned 404 ResourceNotFound, wrote `errored.tfstate`, and left `azuread_application_registration.github`. A second destroy from that local file removed the Entra app. `az group delete` was not used.
 - **A plan prints full resource identifiers.** Refresh and role lines include the subscription id. Those strings are not pasted here.
 - **A tag-only plan was not applied.** After `tags.tf` was added, plan was `0 to add, 3 to change, 0 to destroy` on the two groups and the storage account. That apply has not been run.
