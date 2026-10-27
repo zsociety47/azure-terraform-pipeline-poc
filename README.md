@@ -555,7 +555,7 @@ A resource group, an app registration, and two role assignments have no hourly c
 ## Going further
 
 - Redraw the design picture so it matches the live files.
-- Later Azure projects do not copy this repository. They call the shared modules in [`cloud-projects/terraform/modules`](https://github.com/zsociety47/cloud-projects/tree/main/terraform/modules) and the reusable Plan / Apply jobs. This repository stays the walkthrough of building the pipeline by hand.
+- Later Azure projects do not copy this repository. They call the shared modules in [`cloud-projects/terraform/azure/modules`](https://github.com/zsociety47/cloud-projects/tree/main/terraform/azure/modules) and the reusable Azure Plan / Apply jobs. This repository stays the walkthrough of building the pipeline by hand.
 
 ---
 
