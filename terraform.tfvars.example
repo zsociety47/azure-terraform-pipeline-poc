@@ -1,0 +1,28 @@
+# Copy to terraform.tfvars (gitignored). The defaults in variables.tf are
+# this proof of concept. Change every value that is my GitHub name, my
+# Azure names, or the owner tag. Do not copy the OpenID Connect subjects
+# from variables.tf. Those ids belong to this repository only.
+#
+# Storage account names: lowercase letters and digits only, 3 to 24
+# characters, unique across Azure. Put your owner word in the name.
+#
+# Numeric GitHub ids (not owner/name):
+#   gh api repos/YOUR_OWNER/YOUR_REPO --jq '"owner_id=\(.owner.id)\nrepository_id=\(.id)"'
+# Then:
+#   pull_request_subject = "repo:YOUR_OWNER@OWNER_ID/YOUR_REPO@REPO_ID:pull_request"
+#   main_subject         = "repo:YOUR_OWNER@OWNER_ID/YOUR_REPO@REPO_ID:ref:refs/heads/main"
+
+location                      = "East US"
+state_resource_group_name     = "rg-tfpipe-state-yourname01"
+pipeline_resource_group_name  = "rg-tfpipe-poc-yourname01"
+storage_account_name          = "sttfpipeyourname01"
+pipeline_storage_account_name = "sttfpipepocyourname01"
+github_repository             = "YOUR_OWNER/YOUR_REPO"
+application_display_name      = "github-actions-YOUR_REPO"
+pull_request_subject          = "repo:YOUR_OWNER@OWNER_ID/YOUR_REPO@REPO_ID:pull_request"
+main_subject                  = "repo:YOUR_OWNER@OWNER_ID/YOUR_REPO@REPO_ID:ref:refs/heads/main"
+
+tags = {
+  project = "azure-terraform-pipeline-poc"
+  owner   = "yourname"
+}

@@ -83,7 +83,7 @@ The providers use the Azure CLI login already on the machine. There is no `subsc
 | App registration | `github-actions-azure-terraform-pipeline-poc` |
 | Repository | `zsociety47/azure-terraform-pipeline-poc` |
 
-The OIDC subjects include the GitHub owner id and repository id. A name-only subject would not match a token from this repository.
+The OIDC subjects include the GitHub owner id and repository id. A name-only subject would not match a token from this repository. To run this as yourself, copy `terraform.tfvars.example` and follow [Run this as yourself](#run-this-as-yourself). Do not reuse these ids.
 
 ![variables.tf with the two resource group names](docs/images/step-04-names.png)
 
@@ -299,6 +299,28 @@ One `terraform destroy` of this configuration is the teardown. Terraform deletes
 You need Terraform 1.15.x, the Azure CLI, and a current `az login`. Run these from the repository root, in this order. Each group is one action.
 
 This bootstrap already exists. Use the checks to read Azure. Use apply only after a destroy, or on a machine that already has the local state file.
+
+### Run this as yourself
+
+The names, tags, and GitHub ids in `variables.tf` are this proof of concept. They are not yours. Fork or clone the repository, then copy `terraform.tfvars.example` to `terraform.tfvars` (that file is gitignored). Change:
+
+- every resource name that ends in `zeon01` (put your owner word there; storage account names are lowercase letters and digits only)
+- `github_repository` to `YOUR_OWNER/YOUR_REPO`
+- `tags.owner`
+- the two OpenID Connect (OIDC) subjects. Do not copy the numbers from `variables.tf`. Ask GitHub for your ids:
+
+```bash
+gh api repos/YOUR_OWNER/YOUR_REPO --jq '"owner_id=\(.owner.id)\nrepository_id=\(.id)"'
+```
+
+Then set:
+
+```text
+repo:YOUR_OWNER@OWNER_ID/YOUR_REPO@REPO_ID:pull_request
+repo:YOUR_OWNER@OWNER_ID/YOUR_REPO@REPO_ID:ref:refs/heads/main
+```
+
+In the commands below, replace `zsociety47/azure-terraform-pipeline-poc` and the `zeon01` names with the values you put in `terraform.tfvars`. You need an Azure subscription you can create resource groups in, and a GitHub repository you can put secrets on. `az login` and `gh auth login` first. The pipeline still cannot create its own resource group: create `pipeline_resource_group_name` on the laptop, then let GitHub apply into it.
 
 ### Sign in for this terminal
 
