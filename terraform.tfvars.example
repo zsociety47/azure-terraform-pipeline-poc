@@ -1,10 +1,11 @@
-# Copy to terraform.tfvars (gitignored). The defaults in variables.tf are
-# this proof of concept. Change every value that is my GitHub name, my
-# Azure names, or the owner tag. Do not copy the OpenID Connect subjects
-# from variables.tf. Those ids belong to this repository only.
+# Copy this to terraform.tfvars (it's gitignored). The defaults in variables.tf
+# are the names from my own proof of concept. Change every value that is my
+# GitHub name, my Azure names, or the owner tag. Don't copy the OpenID Connect
+# subjects from variables.tf. Those ids belong to this repository only.
 #
-# Storage account names: lowercase letters and digits only, 3 to 24
-# characters, unique across Azure. Put your owner word in the name.
+# Storage account names can only use lowercase letters and digits, 3 to 24
+# characters, and they have to be unique across Azure. Use your short name
+# and a number in the name.
 #
 # Numeric GitHub ids (not owner/name):
 #   gh api repos/YOUR_OWNER/YOUR_REPO --jq '"owner_id=\(.owner.id)\nrepository_id=\(.id)"'
