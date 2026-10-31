@@ -302,18 +302,19 @@ This bootstrap already exists. Use the checks to read Azure. Use apply only afte
 
 ### Run this as yourself
 
-The names, tags, and GitHub ids in `variables.tf` are this proof of concept. They aren't yours. Fork or clone the repository, then copy `terraform.tfvars.example` to `terraform.tfvars` (that file is gitignored). Change:
+The names committed in this repository are this proof of concept. Leave [`variables.tf`](variables.tf). Put your owner word in the copy you run. The sequence is the same as the [naming standard](https://github.com/zsociety47/cloud-projects/blob/main/standards/NAMING-STANDARD.md): type, project, environment, then **your** owner word and number (`rg-tfpipe-poc-zeon01` becomes `rg-tfpipe-poc-ada01`). Storage account names are lowercase letters and digits only. Do not copy the OpenID Connect (OIDC) numbers from this repository.
 
-- every resource name that ends in `zeon01` (use your short name and a number there; storage account names can only be lowercase letters and digits)
-- `github_repository` to `YOUR_OWNER/YOUR_REPO`
-- `tags.owner`
-- the two OpenID Connect (OIDC) subjects. Don't copy the numbers from `variables.tf`. Ask GitHub for your ids:
+| Open this | Do this |
+|---|---|
+| [`terraform.tfvars.example`](terraform.tfvars.example) | Copy to `terraform.tfvars` (gitignored). Change every name that ends in `zeon01`, `github_repository` to `YOUR_OWNER/YOUR_REPO`, `tags.owner`, and the two OIDC subjects. |
+| [`variables.tf`](variables.tf) | Read only. These defaults are this proof. |
 
 ```bash
+cp terraform.tfvars.example terraform.tfvars
 gh api repos/YOUR_OWNER/YOUR_REPO --jq '"owner_id=\(.owner.id)\nrepository_id=\(.id)"'
 ```
 
-Then set:
+Set the subjects to:
 
 ```text
 repo:YOUR_OWNER@OWNER_ID/YOUR_REPO@REPO_ID:pull_request
