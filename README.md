@@ -11,7 +11,7 @@ The walkthrough isn't recorded yet.
 - **What it is:** Terraform that a pull request can plan, and that only the `main` branch can apply, with no Azure password stored in GitHub.
 - **What's automated:** the laptop created the remote-state account, the pipeline group, and the Microsoft Entra ID app GitHub uses. A pull request runs format, validate, plan, and `scripts/verify.sh`. A push to `main` runs those checks, apply, then verify.
 - **Why it's secure:** GitHub proves who it is with OpenID Connect (OIDC). There's no client secret. Shared keys are off on the state account. Destroying the pipeline group can't delete the state file, because that file lives in a different group.
-- **Result:** [Pull request 1](https://github.com/zsociety47/azure-terraform-pipeline-poc/pull/1) posted a plan and didn't apply. [Pull request 2](https://github.com/zsociety47/azure-terraform-pipeline-poc/pull/2) planned `sttfpipepoczeon01`. Apply on `main` created it. Teardown on 26 October 2026 removed both groups and the Entra app.
+- **Result:** [Pull request 1](https://github.com/zsociety47/azure-terraform-pipeline-poc/pull/1) posted a plan and didn't apply. [Pull request 2](https://github.com/zsociety47/azure-terraform-pipeline-poc/pull/2) planned `sttfpipepoczeon01`. Apply on `main` created it. Teardown on 26 October 2026 removed both groups and the Entra app. Rebuilt 19 November 2026 from the laptop: both groups exist, `scripts/verify.sh` 12 PASS.
 
 Part of [Cloud Projects](https://github.com/zsociety47/cloud-projects). Technical details are in [Technical findings](#technical-findings) at the bottom.
 
@@ -19,7 +19,7 @@ The design picture below is the reference. It comes from the Claude Design canva
 
 ![Design picture of GitHub planning and applying Terraform into Azure](docs/architecture/architecture.png)
 
-*Reference picture. On that picture, a solid box is built and working. A branch rule that requires the plan check is still open. Teardown is done.*
+*Reference picture of the first pass, drawn from the files on 26 October 2026. Solid boxes are the design. The yellow status box is that day's note, when teardown was still open; teardown finished the same day. Live Azure matches this picture only while `az group exists` prints `true` for both groups. The Mermaid under [Architecture](#architecture) is the live map of the files. Claude can redraw the yellow box after a rebuild.*
 
 ---
 
@@ -35,7 +35,7 @@ export ARM_SUBSCRIPTION_ID="$(az account show --query id -o tsv)"
 
 `ARM` is the prefix the Azure Resource Manager provider uses for its environment variables. Read each plan before you type `yes`.
 
-The bootstrap in this repository already exists in Azure. A fresh clone has no local state file. Don't run `terraform apply` on a clone until you have imported the live resources or destroyed them. A second apply would try to create names that are already taken.
+Run `az group exists --name rg-tfpipe-state-zeon01` and the same command for `rg-tfpipe-poc-zeon01`. `false` means the names are free: park `backend.tf`, apply, then `terraform init -migrate-state`, because that backend is `sttfpipezeon01`, which this configuration creates. `true` means this proof is live: don't apply a second copy; import or destroy first. The dated result lives in [Success criteria](#success-criteria). Do not copy a standing “already exists” sentence into this paragraph.
 
 ### Step 1: Keep the state file off GitHub
 
@@ -280,7 +280,7 @@ All twelve checks passed on the laptop after Apply created `sttfpipepoczeon01`. 
 
 *Declared in `pipeline_storage.tf`. Created by the apply job on `main`, not by this laptop.*
 
-`sttfpipepoczeon01` is a storage account in `rg-tfpipe-poc-zeon01`. `st` is storage, `tfpipe` is this project, `poc` is proof of concept, and `zeon01` is my short name plus a number. Shared keys are off, and this isn't the state account. [Pull request 2](https://github.com/zsociety47/azure-terraform-pipeline-poc/pull/2) planned `1 to add`. Apply on `main` added it: https://github.com/zsociety47/azure-terraform-pipeline-poc/actions/runs/40341623802
+`sttfpipepoczeon01` is a storage account in `rg-tfpipe-poc-zeon01`. `st` is storage, `tfpipe` is this project, `poc` is proof of concept, and `zeon01` is my short name plus a number. Shared keys are off, and this isn't the state account. First pass: [pull request 2](https://github.com/zsociety47/azure-terraform-pipeline-poc/pull/2) planned `1 to add`. Apply on `main` added it: https://github.com/zsociety47/azure-terraform-pipeline-poc/actions/runs/40341623802. Rebuild 19 November 2026: the file was already on `main`, so the laptop apply created the account. `scripts/verify.sh` check 12 PASS.
 
 ![sttfpipepoczeon01 in the pipeline group](docs/images/step-23-workload.png)
 
@@ -298,7 +298,7 @@ One `terraform destroy` of this configuration is the teardown. Terraform deletes
 
 You need Terraform 1.15.x, the Azure CLI, and a current `az login`. Run these from the repository root, in this order. Each group is one action.
 
-This bootstrap already exists. Use the checks to read Azure. Use apply only after a destroy, or on a machine that already has the local state file.
+Run the two `az group exists` commands in [Confirm the bootstrap](#confirm-the-bootstrap) first. `false` means apply to rebuild, parking `backend.tf` until `sttfpipezeon01` exists, then migrate. `true` means use the checks only; do not apply a second copy.
 
 ### Run this as yourself
 
@@ -335,7 +335,7 @@ You should see no output.
 
 ### Download the providers
 
-This is step 2. You only run it once per machine.
+This is step 2. You only run it once per machine. If `az group exists --name rg-tfpipe-state-zeon01` prints `true`, init against the remote backend:
 
 ```bash
 terraform init
@@ -343,7 +343,23 @@ terraform init
 
 The last line should be `Terraform has been successfully initialized!`
 
-After `backend.tf` is added, migrate the local state. That's step 17.
+If that group is gone, a first apply against the committed `backend.tf` fails, because that backend is the state account this configuration creates. Park it, use a local backend, apply, then restore and migrate. That's step 17.
+
+```bash
+mv backend.tf backend.tf.parked
+printf '%s\n' 'terraform {' '  backend "local" {' '    path = "terraform.tfstate"' '  }' '}' > backend.tf
+terraform init -reconfigure
+terraform plan
+```
+
+Read the plan. Type `yes` only to apply. Then:
+
+```bash
+terraform apply
+mv backend.tf.parked backend.tf
+```
+
+After `backend.tf` is restored, migrate the local state. That's step 17.
 
 ```bash
 terraform init -migrate-state
@@ -460,7 +476,7 @@ Type the full word `yes` only after you read the destroy plan.
 
 ## Architecture
 
-The picture above is the reference. The Mermaid below is the live map.
+The picture above is the first-pass reference. The Mermaid below is the live map of the files. Names come from the Terraform. Live Azure matches it only while both groups exist.
 
 ```mermaid
 flowchart LR
@@ -509,21 +525,21 @@ A pull request can plan and test a Terraform change, and only the `main` branch 
 
 ## Success criteria
 
-| # | Criterion | How it is checked | Result |
-|---|-----------|-------------------|--------|
-| 1 | `rg-tfpipe-state-zeon01` exists | `az group exists --name rg-tfpipe-state-zeon01` prints `true` | ✅ [confirm the bootstrap](#confirm-the-bootstrap) |
-| 2 | `rg-tfpipe-poc-zeon01` exists | `az group exists --name rg-tfpipe-poc-zeon01` prints `true` | ✅ `scripts/verify.sh` check 2 |
-| 3 | `sttfpipezeon01` has shared keys off and HTTPS only | `az storage account show` returns `sharedKeys` false and `httpsOnly` true | ✅ [confirm the bootstrap](#confirm-the-bootstrap) |
-| 4 | The app registration exists with no client secret | `az ad app list` returns `github-actions-azure-terraform-pipeline-poc` and `AzureADMyOrg` | ✅ [confirm the bootstrap](#confirm-the-bootstrap) |
-| 5 | Two federated credentials match this repository's OIDC subjects | Entra lists `github-pull-request` and `github-main` | ✅ `scripts/verify.sh` check 8 |
-| 6 | GitHub has Storage Blob Data Contributor on the state account | Role assignment on `sttfpipezeon01` | ✅ `scripts/verify.sh` check 9 |
-| 7 | GitHub is Contributor on `rg-tfpipe-poc-zeon01` only | `az role assignment list` returns one row: `Contributor`, `ServicePrincipal` | ✅ [confirm the bootstrap](#confirm-the-bootstrap) |
-| 8 | A pull request posts `terraform plan` and doesn't apply | GitHub Actions run on a pull request | ✅ [pull request 1](https://github.com/zsociety47/azure-terraform-pipeline-poc/pull/1) |
-| 9 | A push to `main` applies only after the checks pass | GitHub Actions run on `main` | ✅ [Apply run](https://github.com/zsociety47/azure-terraform-pipeline-poc/actions/runs/40339604773) |
-| 10 | Teardown removes the groups, the account, and the Entra app | `terraform destroy`, then the app is gone | ✅ [step 24](#step-24-remove-it) |
-| 11 | Remote state is `pipeline.tfstate` in the `tfstate` container | `az storage blob list` prints `pipeline.tfstate` | ✅ [confirm the bootstrap](#confirm-the-bootstrap) |
+| # | Criterion | How it is checked | First pass | Live |
+|---|-----------|-------------------|------------|------|
+| 1 | `rg-tfpipe-state-zeon01` exists | `az group exists --name rg-tfpipe-state-zeon01` prints `true` | ✅ 25 Oct 2026 | 19 Nov 2026: `true` |
+| 2 | `rg-tfpipe-poc-zeon01` exists | `az group exists --name rg-tfpipe-poc-zeon01` prints `true` | ✅ 25 Oct 2026 `verify.sh` 2 | 19 Nov 2026: `true` |
+| 3 | `sttfpipezeon01` has shared keys off and HTTPS only | `az storage account show` returns `sharedKeys` false and `httpsOnly` true | ✅ 25 Oct 2026 | 19 Nov 2026: `verify.sh` 5 PASS |
+| 4 | The app registration exists with no client secret | `az ad app list` returns `github-actions-azure-terraform-pipeline-poc` and `AzureADMyOrg` | ✅ 25 Oct 2026 | 19 Nov 2026: `verify.sh` 7 PASS |
+| 5 | Two federated credentials match this repository's OIDC subjects | Entra lists `github-pull-request` and `github-main` | ✅ 26 Oct 2026 `verify.sh` 8 | 19 Nov 2026: `verify.sh` 8 PASS |
+| 6 | GitHub has Storage Blob Data Contributor on the state account | Role assignment on `sttfpipezeon01` | ✅ 26 Oct 2026 `verify.sh` 9 | 19 Nov 2026: `verify.sh` 9 PASS |
+| 7 | GitHub is Contributor on `rg-tfpipe-poc-zeon01` only | `az role assignment list` returns one row: `Contributor`, `ServicePrincipal` | ✅ 26 Oct 2026 | 19 Nov 2026: `verify.sh` 11 PASS |
+| 8 | A pull request posts `terraform plan` and doesn't apply | GitHub Actions run on a pull request | ✅ [pull request 1](https://github.com/zsociety47/azure-terraform-pipeline-poc/pull/1) | first-pass run; not re-run this rebuild |
+| 9 | A push to `main` applies only after the checks pass | GitHub Actions run on `main` | ✅ [Apply run](https://github.com/zsociety47/azure-terraform-pipeline-poc/actions/runs/40339604773) | first-pass run; not re-run this rebuild |
+| 10 | Teardown removes the groups, the account, and the Entra app | `terraform destroy`, then the app is gone | ✅ 26 Oct 2026 [step 24](#step-24-remove-it) | proven then; live is the 19 Nov rebuild |
+| 11 | Remote state is `pipeline.tfstate` in the `tfstate` container | `az storage blob list` prints `pipeline.tfstate` | ✅ 26 Oct 2026 | 19 Nov 2026: blob listed after migrate |
 
-Criteria 1 through 9 and 11 were checked on 25–26 October 2026. Check 12 of `scripts/verify.sh` passed after Apply created `sttfpipepoczeon01`. Criterion 10: both groups `az group exists` printed `false`, and `az ad app list` for `github-actions-azure-terraform-pipeline-poc` was empty, on 26 October 2026.
+First pass: 25–26 October 2026. Rebuild 19 November 2026: laptop apply `13 added`, state migrated to `pipeline.tfstate`, `scripts/verify.sh` **12 PASS**. **Live** is that verify run. Update it in the same session as apply or teardown.
 
 ## What's in this repository
 
@@ -577,7 +593,7 @@ A resource group, an app registration, and two role assignments have no hourly c
 
 ## Going further
 
-- Redraw the design picture so it matches the live files.
+- The yellow “Where this stands” box on `architecture.png` is the 26 October 2026 first-pass note. Claude can redraw that box after a rebuild. The Mermaid under [Architecture](#architecture) already matches the files.
 - Later Azure projects don't copy this repository. They call the shared modules in [`cloud-projects/terraform/azure/modules`](https://github.com/zsociety47/cloud-projects/tree/main/terraform/azure/modules) and the reusable Azure Plan / Apply jobs. This repository stays the walkthrough of building the pipeline by hand.
 
 ---

@@ -4,4 +4,4 @@ Two diagrams. The design picture is the reference. The Mermaid in the README is 
 
 The design canvas is [Terraform from GitHub to Azure](https://claude.ai/artifact/GoQPZAggwkNXoW3t5sdptY). Export `architecture.png` and `architecture.pdf` into this folder without the "Made with Claude Design" mark. Claude's file exports do not carry it.
 
-Both groups, the state account, the app registration, two federated credentials, the GitHub roles, remote state, both jobs, and `verify.sh` are built. Apply on `main` created `sttfpipepoczeon01`. On the picture, a solid box means built and working. Teardown and a branch rule that requires the plan check are still open.
+The picture is the first-pass map (files on 26 October 2026). Solid boxes are the design. The yellow “Where this stands” box is that day's note, when teardown was still open; teardown finished the same day. Live Azure matches this picture only while `az group exists` prints `true` for `rg-tfpipe-state-zeon01` and `rg-tfpipe-poc-zeon01`. The Mermaid in the README is the live map of the files. If a name disagrees, the Terraform files win. Claude can redraw the yellow box after a rebuild.
