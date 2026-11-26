@@ -3,7 +3,10 @@
 # Inputs: an Azure command-line interface (CLI) login. The subscription id
 # is taken from ARM_SUBSCRIPTION_ID when that variable is set, and from the
 # current CLI account when it is not. The names below match variables.tf.
-# Output: numbered PASS or FAIL lines. Exit 0 when all pass, exit 1 otherwise.
+# Output: numbered PASS, FAIL, or SKIP lines, then a count. Exit 0 when nothing
+# failed, exit 1 otherwise. SKIP is not a failure, and it is used only when
+# Microsoft Entra ID refuses the read with a permission error. A missing
+# application is a FAIL, never a SKIP.
 # Side effects: none. This script does not create or delete Azure resources.
 # It does not print subscription ids, tenant ids, or principal ids.
 
@@ -28,8 +31,11 @@ if [[ -z "${ARM_SUBSCRIPTION_ID:-}" ]]; then
 fi
 
 failed=0
-pass() { printf '%s  %s: PASS\n' "$1" "$2"; }
+passed=0
+skipped=0
+pass() { printf '%s  %s: PASS\n' "$1" "$2"; passed=$((passed + 1)); }
 fail() { printf '%s  %s: FAIL\n' "$1" "$2"; failed=1; }
+skip() { printf '%s  %s: SKIP\n' "$1" "$2"; skipped=$((skipped + 1)); }
 
 tags_ok() {
   local json="$1"
@@ -118,20 +124,43 @@ else
   fail 6 "Blob ${state_blob} is in ${container_name}"
 fi
 
-# The GitHub runner can sign in with OpenID Connect. It cannot
-# read Microsoft Entra ID applications. Checks 7 and 8 run on
-# the laptop. They are skipped, not failed, on the runner.
-skip() { printf '%s  %s: SKIP\n' "$1" "$2"; }
+# Checks 7 and 8 read Microsoft Entra ID. Reading it can fail for three
+# different reasons, and they are not the same result:
+#   readable      -> run the check. PASS or FAIL.
+#   permission denied by Entra -> SKIP, and say so with the Graph error code.
+#   not found, or any other error -> FAIL. A missing app must never go green.
+# On the GitHub runner ARM_CLIENT_ID is set, so the app is read by id, the
+# same read Terraform does on every plan. On the laptop it is found by name.
+errf="$(mktemp)"
+trap 'rm -f "$errf"' EXIT
 
-app_object_id="$(az ad app list --display-name "$app_name" --query "[0].id" -o tsv 2>/dev/null || true)"
-if [[ -z "$app_object_id" ]]; then
-  skip 7 "${app_name} is AzureADMyOrg with no client secret (this login cannot read Microsoft Entra ID)"
-  skip 8 "Federated credentials github-pull-request and github-main exist (this login cannot read Microsoft Entra ID)"
+graph_code() {
+  grep -o -i -E 'Authorization_RequestDenied|Insufficient privileges|Request_ResourceNotFound|Forbidden|Unauthorized' "$errf" | head -1
+}
+
+is_denied() {
+  case "$(graph_code)" in
+    Authorization_RequestDenied | "Insufficient privileges" | Forbidden | Unauthorized) return 0 ;;
+    *) return 1 ;;
+  esac
+}
+
+app_query="{object:id, audience:signInAudience, secrets:length(passwordCredentials)}"
+if [[ -n "${ARM_CLIENT_ID:-}" ]]; then
+  app_facts="$(az ad app show --id "$ARM_CLIENT_ID" --query "$app_query" -o json 2>"$errf")"
+  app_rc=$?
 else
-  app_facts="$(az ad app list \
-    --display-name "$app_name" \
-    --query "[0].{audience:signInAudience, secrets:length(passwordCredentials)}" \
-    -o json 2>/dev/null || echo '{}')"
+  app_facts="$(az ad app list --display-name "$app_name" --query "[0].${app_query}" -o json 2>"$errf")"
+  app_rc=$?
+fi
+
+if [[ "$app_rc" -ne 0 ]] && is_denied; then
+  skip 7 "${app_name} is AzureADMyOrg with no client secret (Entra refused this login: $(graph_code))"
+  skip 8 "Federated credentials github-pull-request and github-main exist (Entra refused this login: $(graph_code))"
+elif [[ "$app_rc" -ne 0 ]] || [[ -z "$app_facts" ]] || [[ "$app_facts" == "null" ]]; then
+  fail 7 "${app_name} is AzureADMyOrg with no client secret (application not found or unreadable)"
+  fail 8 "Federated credentials github-pull-request and github-main exist (application not found or unreadable)"
+else
   app_pass="$(printf '%s' "$app_facts" | python3 -c '
 import json, sys
 facts = json.load(sys.stdin)
@@ -143,16 +172,24 @@ print("yes" if facts.get("audience") == "AzureADMyOrg" and facts.get("secrets") 
     fail 7 "${app_name} is AzureADMyOrg with no client secret"
   fi
 
-  cred_names="$(az ad app federated-credential list --id "$app_object_id" --query "[].name" -o json 2>/dev/null || echo '[]')"
-  cred_pass="$(printf '%s' "$cred_names" | python3 -c '
+  app_object_id="$(printf '%s' "$app_facts" | python3 -c 'import json, sys; print(json.load(sys.stdin).get("object", ""))')"
+  cred_names="$(az ad app federated-credential list --id "$app_object_id" --query "[].name" -o json 2>"$errf")"
+  cred_rc=$?
+  if [[ "$cred_rc" -ne 0 ]] && is_denied; then
+    skip 8 "Federated credentials github-pull-request and github-main exist (Entra refused this login: $(graph_code))"
+  elif [[ "$cred_rc" -ne 0 ]]; then
+    fail 8 "Federated credentials github-pull-request and github-main exist (read failed)"
+  else
+    cred_pass="$(printf '%s' "$cred_names" | python3 -c '
 import json, sys
 names = set(json.load(sys.stdin))
 print("yes" if {"github-pull-request", "github-main"} <= names else "no")
 ')"
-  if [[ "$cred_pass" == "yes" ]]; then
-    pass 8 "Federated credentials github-pull-request and github-main exist"
-  else
-    fail 8 "Federated credentials github-pull-request and github-main exist"
+    if [[ "$cred_pass" == "yes" ]]; then
+      pass 8 "Federated credentials github-pull-request and github-main exist"
+    else
+      fail 8 "Federated credentials github-pull-request and github-main exist"
+    fi
   fi
 fi
 
@@ -213,4 +250,5 @@ else
   fail 12 "Pipeline storage account ${pipeline_storage_account} exists"
 fi
 
+printf '\n%s PASS, %s SKIP, %s\n' "$passed" "$skipped" "$([[ "$failed" -eq 0 ]] && echo "no FAIL" || echo "at least one FAIL")"
 exit "$failed"

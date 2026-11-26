@@ -78,6 +78,11 @@ jobs:
           PY
           gh pr comment "${{ github.event.pull_request.number }}" --body-file plan-comment.md
 
+      - name: Record Entra read access (diagnostic, never fails the job)
+        run: |
+          chmod +x scripts/entra-read-probe.sh
+          ./scripts/entra-read-probe.sh
+
       - name: Verify
         run: |
           set -euo pipefail
