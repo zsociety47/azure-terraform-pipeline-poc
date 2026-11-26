@@ -35,6 +35,12 @@ variable "pipeline_storage_account_name" {
   default     = "sttfpipepoczeon01"
 }
 
+variable "pipeline_container_name" {
+  description = "Private blob container the pipeline can add inside the pipeline storage account. Not the state container."
+  type        = string
+  default     = "walkthrough"
+}
+
 variable "storage_container_name" {
   description = "Blob container that holds the state file."
   type        = string
