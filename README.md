@@ -592,15 +592,15 @@ First pass: 25–26 October 2026. Rebuild 19 November 2026: laptop apply `13 add
 
 - **The pipeline identity has no Microsoft Graph permission, on purpose.** GitHub's service principal was not given a permission such as `Application.Read.All`. That permission would let a pull-request job read every application in the tenant, only to prove two facts about one app. The cost of the choice is that anything Entra refuses, the runner can't check.
 - **What is known.** Terraform plans and the apply on `main` succeeded on the runner, and every plan refreshes the app registration, the service principal and both federated credentials. So some Entra reads work for this identity.
-- **What is not yet shown.** Which reads exactly. `scripts/entra-read-probe.sh` runs in the Plan and Apply jobs and prints ALLOWED, DENIED, NOT_FOUND or ERROR for three reads. Until a run has printed them, the table below is empty and the old claim that the runner "cannot read Entra" is unproven.
+- **What is not yet shown.** Which reads exactly. `scripts/entra-read-probe.sh` runs in the Plan and Apply jobs and prints ALLOWED, DENIED, NOT_FOUND or ERROR for three reads. The first run of the probe (pull request 6, November 26, 2026) could not reach it: the lab had already been torn down, so Azure refused the sign-in with AADSTS70025, no configured federated identity credentials, before any read ran. The table below stays unmeasured, and the old claim that the runner "cannot read Entra" stays unproven, until the probe runs while the lab is up.
 - **How checks 7 and 8 behave now.** SKIP only when Entra refuses the read with a permission error, and the Graph error code is printed. A missing app is a FAIL. The summary line shows the PASS and SKIP counts, so a skip can't hide.
 - **Until the probe has run, the proof for checks 7 and 8 is the laptop run.** Not the pipeline.
 
 | Probe on the runner | Result |
 |---------------------|--------|
-| 1 Read own application by id | not yet recorded |
-| 2 List own federated credentials by id | not yet recorded |
-| 3 Search applications by display name | not yet recorded |
+| 1 Read own application by id | not measured (lab torn down) |
+| 2 List own federated credentials by id | not measured (lab torn down) |
+| 3 Search applications by display name | not measured (lab torn down) |
 
 ## Cost
 
