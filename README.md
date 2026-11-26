@@ -268,7 +268,7 @@ The first push that adds this file to `main` runs apply.
 
 The script reads Azure. It doesn't create or delete anything. It checks both groups, the four tags, shared keys off, the state blob, the app registration, both federated credentials, and the GitHub roles. It doesn't print subscription ids.
 
-All twelve checks passed on the laptop after Apply created `sttfpipepoczeon01`. The plan and apply jobs run this script. Checks 7 and 8 need Microsoft Entra ID read access, which the GitHub principal doesn't have, so those two are skipped on the runner. A failed Azure check still fails the job.
+All twelve checks passed on the laptop after Apply created `sttfpipepoczeon01`. The plan and apply jobs run this script. Checks 7 and 8 read Microsoft Entra ID. On the runner they read the app by its client id, which is the same read Terraform does on every plan. If Entra refuses that read with a permission error, the check prints SKIP and the Graph error code, and the summary line counts the skips. If the app is missing or the read fails any other way, the check is a FAIL, never a SKIP. A failed Azure check fails the job. [`scripts/entra-read-probe.sh`](scripts/entra-read-probe.sh) records once per run which Entra reads the runner is allowed to make. See [Honest limits](#honest-limits).
 
 ```bash
 ./scripts/verify.sh
@@ -539,7 +539,7 @@ A pull request can plan and test a Terraform change, and only the `main` branch 
 | 10 | Teardown removes the groups, the account, and the Entra app | `terraform destroy`, then the app is gone | ✅ 26 Oct 2026 [step 24](#step-24-remove-it) | proven then; live is the 26 Nov recreate after the 20 Nov sweep |
 | 11 | Remote state is `pipeline.tfstate` in the `tfstate` container | `az storage blob list` prints `pipeline.tfstate` | ✅ 26 Oct 2026 | 26 Nov 2026: blob listed |
 
-First pass: 25–26 October 2026. Rebuild 19 November 2026: laptop apply `13 added`, state migrated to `pipeline.tfstate`, `scripts/verify.sh` **12 PASS**. Sweep 20 November 2026 deleted `rg-tfpipe-poc-zeon01`. Recreate 26 November 2026: laptop apply `3 added, 0 changed, 0 destroyed`, `az group exists` `true`/`true`, `scripts/verify.sh` **12 PASS**. **Live** is that verify run. Update it in the same session as apply or teardown.
+First pass: 25–26 October 2026. Rebuild 19 November 2026: laptop apply `13 added`, state migrated to `pipeline.tfstate`, `scripts/verify.sh` **12 PASS**. Sweep 20 November 2026 deleted `rg-tfpipe-poc-zeon01`. Recreate 26 November 2026: laptop apply `3 added, 0 changed, 0 destroyed`, `az group exists` `true`/`true`, `scripts/verify.sh` **12 PASS**. **Live** is that verify run. Update it in the same session as apply or teardown. That verify run was on the laptop. Rows 4 and 5 were read with the operator's own login, not by the pipeline.
 
 ## What's in this repository
 
@@ -567,6 +567,7 @@ First pass: 25–26 October 2026. Rebuild 19 November 2026: laptop apply `13 add
 ├── .github/workflows/plan.yml   Pull request: format, validate, plan. No apply
 ├── .github/workflows/apply.yml  main: those checks, then apply
 ├── scripts/verify.sh            Live Azure checks. Does not apply
+├── scripts/entra-read-probe.sh  Records which Entra reads the runner can make. Read-only
 ├── .terraform.lock.hcl      Exact provider builds selected by terraform init
 └── docs/
     └── architecture/
@@ -586,6 +587,20 @@ First pass: 25–26 October 2026. Rebuild 19 November 2026: laptop apply `13 add
 - **Contributor is scoped to one group.** The GitHub principal can change `rg-tfpipe-poc-zeon01`. It can't create other resource groups.
 - **State lives in Azure.** `backend.tf` points at `sttfpipezeon01`. After migrate, the blob is `pipeline.tfstate`. The leftover local `terraform.tfstate` is empty and still gitignored.
 - **The subscription id is an environment variable.** `provider.tf` doesn't contain it.
+
+## Honest limits
+
+- **The pipeline identity has no Microsoft Graph permission, on purpose.** GitHub's service principal was not given a permission such as `Application.Read.All`. That permission would let a pull-request job read every application in the tenant, only to prove two facts about one app. The cost of the choice is that anything Entra refuses, the runner can't check.
+- **What is known.** Terraform plans and the apply on `main` succeeded on the runner, and every plan refreshes the app registration, the service principal and both federated credentials. So some Entra reads work for this identity.
+- **What is not yet shown.** Which reads exactly. `scripts/entra-read-probe.sh` runs in the Plan and Apply jobs and prints ALLOWED, DENIED, NOT_FOUND or ERROR for three reads. The first run of the probe (pull request 6, November 26, 2026) could not reach it: the lab had already been torn down, so Azure refused the sign-in with AADSTS70025, no configured federated identity credentials, before any read ran. The table below stays unmeasured, and the old claim that the runner "cannot read Entra" stays unproven, until the probe runs while the lab is up.
+- **How checks 7 and 8 behave now.** SKIP only when Entra refuses the read with a permission error, and the Graph error code is printed. A missing app is a FAIL. The summary line shows the PASS and SKIP counts, so a skip can't hide.
+- **Until the probe has run, the proof for checks 7 and 8 is the laptop run.** Not the pipeline.
+
+| Probe on the runner | Result |
+|---------------------|--------|
+| 1 Read own application by id | not measured (lab torn down) |
+| 2 List own federated credentials by id | not measured (lab torn down) |
+| 3 Search applications by display name | not measured (lab torn down) |
 
 ## Cost
 
