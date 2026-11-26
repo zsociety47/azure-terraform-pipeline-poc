@@ -11,7 +11,7 @@ The walkthrough isn't recorded yet.
 - **What it is:** Terraform that a pull request can plan, and that only the `main` branch can apply, with no Azure password stored in GitHub.
 - **What's automated:** the laptop created the remote-state account, the pipeline group, and the Microsoft Entra ID app GitHub uses. A pull request runs format, validate, plan, and `scripts/verify.sh`. A push to `main` runs those checks, apply, then verify.
 - **Why it's secure:** GitHub proves who it is with OpenID Connect (OIDC). There's no client secret. Shared keys are off on the state account. Destroying the pipeline group can't delete the state file, because that file lives in a different group.
-- **Result:** [Pull request 1](https://github.com/zsociety47/azure-terraform-pipeline-poc/pull/1) posted a plan and didn't apply. [Pull request 2](https://github.com/zsociety47/azure-terraform-pipeline-poc/pull/2) planned `sttfpipepoczeon01`. Apply on `main` created it. Teardown on 26 October 2026 removed both groups and the Entra app. Rebuilt 19 November 2026 from the laptop: both groups exist, `scripts/verify.sh` 12 PASS.
+- **Result:** [Pull request 1](https://github.com/zsociety47/azure-terraform-pipeline-poc/pull/1) posted a plan and didn't apply. [Pull request 2](https://github.com/zsociety47/azure-terraform-pipeline-poc/pull/2) planned `sttfpipepoczeon01`. Apply on `main` created it. Teardown on 26 October 2026 removed both groups and the Entra app. Rebuilt 19 November 2026 from the laptop. The nightly sweep deleted `rg-tfpipe-poc-zeon01` on 20 November 2026 (`lifetime=1d`). Recreated 26 November 2026: `az group exists` printed `true` for both groups, `scripts/verify.sh` 12 PASS.
 
 Part of [Cloud Projects](https://github.com/zsociety47/cloud-projects). Technical details are in [Technical findings](#technical-findings) at the bottom.
 
@@ -280,7 +280,7 @@ All twelve checks passed on the laptop after Apply created `sttfpipepoczeon01`. 
 
 *Declared in `pipeline_storage.tf`. Created by the apply job on `main`, not by this laptop.*
 
-`sttfpipepoczeon01` is a storage account in `rg-tfpipe-poc-zeon01`. `st` is storage, `tfpipe` is this project, `poc` is proof of concept, and `zeon01` is my short name plus a number. Shared keys are off, and this isn't the state account. First pass: [pull request 2](https://github.com/zsociety47/azure-terraform-pipeline-poc/pull/2) planned `1 to add`. Apply on `main` added it: https://github.com/zsociety47/azure-terraform-pipeline-poc/actions/runs/40341623802. Rebuild 19 November 2026: the file was already on `main`, so the laptop apply created the account. `scripts/verify.sh` check 12 PASS.
+`sttfpipepoczeon01` is a storage account in `rg-tfpipe-poc-zeon01`. `st` is storage, `tfpipe` is this project, `poc` is proof of concept, and `zeon01` is my short name plus a number. Shared keys are off, and this isn't the state account. First pass: [pull request 2](https://github.com/zsociety47/azure-terraform-pipeline-poc/pull/2) planned `1 to add`. Apply on `main` added it: https://github.com/zsociety47/azure-terraform-pipeline-poc/actions/runs/40341623802. Rebuild 19 November 2026: the file was already on `main`, so the laptop apply created the account. Sweep 20 November 2026 deleted it with the 1d group. Recreated 26 November 2026 with the group. `scripts/verify.sh` check 12 PASS.
 
 ![sttfpipepoczeon01 in the pipeline group](docs/images/step-23-workload.png)
 
@@ -527,19 +527,19 @@ A pull request can plan and test a Terraform change, and only the `main` branch 
 
 | # | Criterion | How it is checked | First pass | Live |
 |---|-----------|-------------------|------------|------|
-| 1 | `rg-tfpipe-state-zeon01` exists | `az group exists --name rg-tfpipe-state-zeon01` prints `true` | ✅ 25 Oct 2026 | 19 Nov 2026: `true` |
-| 2 | `rg-tfpipe-poc-zeon01` exists | `az group exists --name rg-tfpipe-poc-zeon01` prints `true` | ✅ 25 Oct 2026 `verify.sh` 2 | 19 Nov 2026: `true` |
-| 3 | `sttfpipezeon01` has shared keys off and HTTPS only | `az storage account show` returns `sharedKeys` false and `httpsOnly` true | ✅ 25 Oct 2026 | 19 Nov 2026: `verify.sh` 5 PASS |
-| 4 | The app registration exists with no client secret | `az ad app list` returns `github-actions-azure-terraform-pipeline-poc` and `AzureADMyOrg` | ✅ 25 Oct 2026 | 19 Nov 2026: `verify.sh` 7 PASS |
-| 5 | Two federated credentials match this repository's OIDC subjects | Entra lists `github-pull-request` and `github-main` | ✅ 26 Oct 2026 `verify.sh` 8 | 19 Nov 2026: `verify.sh` 8 PASS |
-| 6 | GitHub has Storage Blob Data Contributor on the state account | Role assignment on `sttfpipezeon01` | ✅ 26 Oct 2026 `verify.sh` 9 | 19 Nov 2026: `verify.sh` 9 PASS |
-| 7 | GitHub is Contributor on `rg-tfpipe-poc-zeon01` only | `az role assignment list` returns one row: `Contributor`, `ServicePrincipal` | ✅ 26 Oct 2026 | 19 Nov 2026: `verify.sh` 11 PASS |
+| 1 | `rg-tfpipe-state-zeon01` exists | `az group exists --name rg-tfpipe-state-zeon01` prints `true` | ✅ 25 Oct 2026 | 26 Nov 2026: `true` |
+| 2 | `rg-tfpipe-poc-zeon01` exists | `az group exists --name rg-tfpipe-poc-zeon01` prints `true` | ✅ 25 Oct 2026 `verify.sh` 2 | 26 Nov 2026: `true` (recreated after 20 Nov sweep) |
+| 3 | `sttfpipezeon01` has shared keys off and HTTPS only | `az storage account show` returns `sharedKeys` false and `httpsOnly` true | ✅ 25 Oct 2026 | 26 Nov 2026: `verify.sh` 5 PASS |
+| 4 | The app registration exists with no client secret | `az ad app list` returns `github-actions-azure-terraform-pipeline-poc` and `AzureADMyOrg` | ✅ 25 Oct 2026 | 26 Nov 2026: `verify.sh` 7 PASS |
+| 5 | Two federated credentials match this repository's OIDC subjects | Entra lists `github-pull-request` and `github-main` | ✅ 26 Oct 2026 `verify.sh` 8 | 26 Nov 2026: `verify.sh` 8 PASS |
+| 6 | GitHub has Storage Blob Data Contributor on the state account | Role assignment on `sttfpipezeon01` | ✅ 26 Oct 2026 `verify.sh` 9 | 26 Nov 2026: `verify.sh` 9 PASS |
+| 7 | GitHub is Contributor on `rg-tfpipe-poc-zeon01` only | `az role assignment list` returns one row: `Contributor`, `ServicePrincipal` | ✅ 26 Oct 2026 | 26 Nov 2026: `verify.sh` 11 PASS |
 | 8 | A pull request posts `terraform plan` and doesn't apply | GitHub Actions run on a pull request | ✅ [pull request 1](https://github.com/zsociety47/azure-terraform-pipeline-poc/pull/1) | first-pass run; not re-run this rebuild |
 | 9 | A push to `main` applies only after the checks pass | GitHub Actions run on `main` | ✅ [Apply run](https://github.com/zsociety47/azure-terraform-pipeline-poc/actions/runs/40339604773) | first-pass run; not re-run this rebuild |
-| 10 | Teardown removes the groups, the account, and the Entra app | `terraform destroy`, then the app is gone | ✅ 26 Oct 2026 [step 24](#step-24-remove-it) | proven then; live is the 19 Nov rebuild |
-| 11 | Remote state is `pipeline.tfstate` in the `tfstate` container | `az storage blob list` prints `pipeline.tfstate` | ✅ 26 Oct 2026 | 19 Nov 2026: blob listed after migrate |
+| 10 | Teardown removes the groups, the account, and the Entra app | `terraform destroy`, then the app is gone | ✅ 26 Oct 2026 [step 24](#step-24-remove-it) | proven then; live is the 26 Nov recreate after the 20 Nov sweep |
+| 11 | Remote state is `pipeline.tfstate` in the `tfstate` container | `az storage blob list` prints `pipeline.tfstate` | ✅ 26 Oct 2026 | 26 Nov 2026: blob listed |
 
-First pass: 25–26 October 2026. Rebuild 19 November 2026: laptop apply `13 added`, state migrated to `pipeline.tfstate`, `scripts/verify.sh` **12 PASS**. **Live** is that verify run. Update it in the same session as apply or teardown.
+First pass: 25–26 October 2026. Rebuild 19 November 2026: laptop apply `13 added`, state migrated to `pipeline.tfstate`, `scripts/verify.sh` **12 PASS**. Sweep 20 November 2026 deleted `rg-tfpipe-poc-zeon01`. Recreate 26 November 2026: laptop apply `3 added, 0 changed, 0 destroyed`, `az group exists` `true`/`true`, `scripts/verify.sh` **12 PASS**. **Live** is that verify run. Update it in the same session as apply or teardown.
 
 ## What's in this repository
 
