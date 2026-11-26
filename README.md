@@ -2,7 +2,7 @@
 
 ## Watch the walkthrough
 
-The walkthrough isn't recorded yet.
+Recorded 26 November 2026. The share link goes on this line when the file is posted.
 
 **Author:** Zeon Stewart, [LinkedIn](LINKEDIN_LINK_HERE)
 
